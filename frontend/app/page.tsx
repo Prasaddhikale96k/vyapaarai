@@ -9,18 +9,16 @@ import FeaturesBento from "@/components/landing/FeaturesBento";
 import VoiceLanguageSection from "@/components/landing/VoiceLanguageSection";
 import FestivalSection from "@/components/landing/FestivalSection";
 import SoulSection from "@/components/landing/SoulSection";
+import HITLSection from "@/components/landing/HITLSection";
+import Testimonials from "@/components/landing/Testimonials";
+import CTASection from "@/components/landing/CTASection";
+import Footer from "@/components/landing/Footer";
 
 /**
  * VyapaarAI landing — saffron/ivory/navy edition.
  * Sections land phase by phase; stubs below are VISIBLE placeholders
  * (anti-blank: real text, real ids) replaced with real components.
  */
-
-const STUBS: { id: string; label: string }[] = [
-  { id: "hitl", label: "The AI Suggests. You Decide. Always." },
-  { id: "testimonials", label: "From the Ledger to the Future." },
-  { id: "cta", label: "Ready to Know Your Business?" },
-];
 
 export default function HomePage() {
   return (
@@ -36,12 +34,11 @@ export default function HomePage() {
         <VoiceLanguageSection />
         <FestivalSection />
         <SoulSection />
-        <footer className="mx-auto max-w-7xl px-4 py-16">
-          <p className="text-sm" style={{ color: "#8B7355" }}>
-            © 2025 VyapaarAI. Built for India&apos;s kiranas.
-          </p>
-        </footer>
+        <HITLSection />
+        <Testimonials />
+        <CTASection />
       </main>
+      <Footer />
     </LandingShell>
   );
 }
