@@ -1,4 +1,7 @@
 import LandingShell from "@/components/landing/LandingShell";
+import Hero from "@/components/landing/Hero";
+import SocialProofBar from "@/components/landing/SocialProofBar";
+import ProblemSection from "@/components/landing/ProblemSection";
 
 /**
  * VyapaarAI landing — saffron/ivory/navy edition.
@@ -7,9 +10,6 @@ import LandingShell from "@/components/landing/LandingShell";
  */
 
 const STUBS: { id: string; label: string }[] = [
-  { id: "hero", label: "Hero — Your Kirana's AI Brain on WhatsApp." },
-  { id: "proof-bar", label: "Social proof bar" },
-  { id: "problem", label: "The Bahi-Khata Bleeds Money — Silently." },
   { id: "whatsapp-loop", label: "One WhatsApp. Your Entire Business." },
   { id: "how-it-works", label: "From Bahi-Khata to Business Intelligence" },
   { id: "demo", label: "Real Numbers. Real Business." },
@@ -26,11 +26,9 @@ export default function HomePage() {
   return (
     <LandingShell>
       <main style={{ background: "#FDFAF4", color: "#1A1209" }}>
-        {STUBS.map((s) => (
-          <section key={s.id} id={s.id} className="mx-auto max-w-7xl px-4 py-24">
-            <h2 className="font-display text-3xl font-bold">{s.label}</h2>
-          </section>
-        ))}
+        <Hero />
+        <SocialProofBar />
+        <ProblemSection />
         <footer className="mx-auto max-w-7xl px-4 py-16">
           <p className="text-sm" style={{ color: "#8B7355" }}>
             © 2025 VyapaarAI. Built for India&apos;s kiranas.
