@@ -145,11 +145,112 @@
   transform: scaleX(1);
 }
 
+/* ---------- Kirana hero scene life (loops run only under .kirana-loops,
+   which JS adds when motion is allowed; transform/opacity only) ---------- */
+.kirana-loops #cord-bulb {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: kirana-swing 3.5s ease-in-out infinite alternate;
+}
+.kirana-loops .bulb-rays {
+  animation: kirana-rays 2.4s ease-in-out infinite alternate;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.kirana-scene:hover .bulb-rays {
+  animation-duration: 1.2s;
+}
+.kirana-loops #sign {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
+  animation: kirana-sway 4.5s ease-in-out infinite alternate;
+}
+.kirana-loops #shopkeeper #body {
+  animation: kirana-bob 2.8s ease-in-out infinite alternate;
+}
+.kirana-loops #shopkeeper #eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kirana-blink 4s linear infinite;
+}
+.kirana-loops .product-wiggle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kirana-wiggle 6s ease-in-out infinite;
+}
+.kirana-loops #paid-stamp {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kirana-rethunk 8s ease-out infinite;
+}
+.kirana-loops #typing-dots .tdot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kirana-dot 1.2s ease-in-out infinite;
+}
+.kirana-loops #typing-dots {
+  transition: opacity 0.2s ease-out;
+}
+.kirana-loops #typing-dots .tdot:nth-child(2) { animation-delay: 0.15s; }
+.kirana-loops #typing-dots .tdot:nth-child(3) { animation-delay: 0.3s; }
+.kirana-loops #msg-bubble.bubble-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kirana-bubble-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes kirana-swing {
+  from { transform: rotate(-3deg); }
+  to { transform: rotate(3deg); }
+}
+@keyframes kirana-rays {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+@keyframes kirana-sway {
+  from { transform: rotate(-1.5deg); }
+  to { transform: rotate(1.5deg); }
+}
+@keyframes kirana-bob {
+  from { transform: translateY(-2px); }
+  to { transform: translateY(2px); }
+}
+@keyframes kirana-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+@keyframes kirana-wiggle {
+  0%, 90%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(5deg); }
+  94% { transform: rotate(-5deg); }
+  96% { transform: rotate(2deg); }
+}
+@keyframes kirana-rethunk {
+  0%, 94%, 100% { transform: scale(1); }
+  97% { transform: scale(1.08); }
+}
+@keyframes kirana-dot {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes kirana-bubble-pop {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* ---------- Reduced motion: kill landing CSS motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .landing-marquee-track,
   .landing-ping-ring,
-  .landing-bob {
+  .landing-bob,
+  .kirana-loops #cord-bulb,
+  .kirana-loops .bulb-rays,
+  .kirana-loops #sign,
+  .kirana-loops #shopkeeper #body,
+  .kirana-loops #shopkeeper #eyes,
+  .kirana-loops .product-wiggle,
+  .kirana-loops #paid-stamp,
+  .kirana-loops #typing-dots .tdot,
+  .kirana-loops #msg-bubble.bubble-pop {
     animation: none;
   }
   .landing-transcript.js .landing-transcript-line {
