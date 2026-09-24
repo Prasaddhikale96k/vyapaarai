@@ -1,0 +1,122 @@
+"use client";
+
+/**
+ * VyapaarAI landing — Expert Edition.
+ * 6 sections: Hero / Proof / Scrollytelling / Features / Transformation / CTA + footer.
+ * SSR renders every section fully visible; GSAP enhances post-mount only.
+ * Existing routes (/login, /register, /app/*, /admin) untouched.
+ */
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { useTheme } from "@/lib/theme";
+import { Watchdog } from "@/components/reveal";
+import ScrollProgress from "@/components/story/ScrollProgress";
+import HeroSection from "@/components/expert/HeroSection";
+import ProofSection from "@/components/expert/ProofSection";
+import ScrollytellingSection from "@/components/expert/ScrollytellingSection";
+import FeaturesSection from "@/components/expert/FeaturesSection";
+import TransformationSection from "@/components/expert/TransformationSection";
+import CTASection from "@/components/expert/CTASection";
+import Footer from "@/components/expert/Footer";
+
+function SiteHeader() {
+  const { theme, toggle } = useTheme();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 24);
+    window.addEventListener("scroll", fn, { passive: true });
+    return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  return (
+    <motion.header
+      className="fixed inset-x-0 top-0 z-40 transition-colors"
+      style={{
+        background: scrolled ? "color-mix(in srgb, var(--paper) 88%, transparent)" : "transparent",
+        borderBottom: scrolled ? "1px solid var(--card-border)" : "1px solid transparent",
+      }}
+    >
+      <nav className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-3" aria-label="Primary">
+        <Link
+          href="/"
+          className="flex items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4"
+          style={{ outlineColor: "var(--accent)" }}
+          aria-current="page"
+        >
+          <span
+            className="font-display flex h-9 w-9 items-center justify-center rounded-xl text-lg font-bold text-white"
+            style={{ background: "var(--accent)" }}
+            aria-hidden="true"
+          >
+            V
+          </span>
+          <span className="flex flex-col leading-none">
+            <span className="font-devanagari text-xl font-bold" style={{ color: "var(--ink)" }}>
+              व्यापार
+            </span>
+            <span className="text-[10px] font-semibold tracking-widest" style={{ color: "var(--ink-faint)" }}>
+              VYAPAARAI
+            </span>
+          </span>
+        </Link>
+        <div className="ml-auto hidden items-center gap-5 text-sm md:flex" style={{ color: "var(--ink-soft)" }}>
+          <a href="#how" className="rounded px-1 py-2 hover:opacity-70 focus-visible:outline-2" style={{ outlineColor: "var(--accent)" }}>
+            How it works
+          </a>
+          <a href="#features" className="rounded px-1 py-2 hover:opacity-70 focus-visible:outline-2" style={{ outlineColor: "var(--accent)" }}>
+            Features
+          </a>
+          <a href="#demo" className="rounded px-1 py-2 hover:opacity-70 focus-visible:outline-2" style={{ outlineColor: "var(--accent)" }}>
+            Demo
+          </a>
+        </div>
+        <div className="ml-auto flex items-center gap-2 md:ml-0">
+          <button
+            onClick={toggle}
+            aria-label="Toggle color theme"
+            className="rounded-xl border p-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+            style={{ borderColor: "var(--card-border)", color: "var(--ink)", outlineColor: "var(--accent)", minWidth: 44, minHeight: 44 }}
+          >
+            {theme === "light" ? "Dark" : "Light"}
+          </button>
+          <Link
+            href="/login"
+            className="btn-primary inline-flex min-h-[44px] items-center hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4"
+            style={{ textDecoration: "none", outlineColor: "var(--accent)" }}
+          >
+            Login
+          </Link>
+        </div>
+      </nav>
+    </motion.header>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <div className="grain min-h-screen" style={{ background: "var(--paper)", color: "var(--ink)" }}>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[80] focus:rounded-lg focus:px-4 focus:py-2 focus:font-semibold"
+        style={{ background: "var(--accent)", color: "#fff" }}
+      >
+        Skip to content
+      </a>
+      <Watchdog />
+      <ScrollProgress />
+      <SiteHeader />
+      <main id="main">
+        <HeroSection />
+        <ProofSection />
+        <ScrollytellingSection />
+        <FeaturesSection />
+        <TransformationSection />
+        <CTASection />
+      </main>
+      <Footer />
+    </div>
+  );
+}

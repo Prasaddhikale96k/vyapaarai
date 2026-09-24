@@ -263,26 +263,26 @@ Build **P7 item 4 (auto-sync reliability: processed-files ledger + startup scan 
 
 ## Phase B (2026-09-24)
 
-### B1 � UPI deep-links + daily PDF (P9 VERIFY: 7/7 + legacy green)
+### B1 � UPI deep-links + daily PDF (P9 VERIFY: 7/7 + legacy green)
 - owner_profiles.upi_vpa (migration + seed backfill sharmatraders@okicici); payment drafts append NPCI upi://pay link; /actions chip.
 - services/reports.py 1-page PDF; outers/reports.py (GET /reports/daily, POST /reports/send-now); send_document on OpenWA (send-document) + Evolution; 21:00 
 ightly_report cron; dashboard report popover.
 
-### B2 � credit score + festival forecast (P10 VERIFY: 5/5 + legacy green)
+### B2 � credit score + festival forecast (P10 VERIFY: 5/5 + legacy green)
 - services/credit.py (discipline 40 / stability 30 / growth 20 / margin 10) + GET /credit-score; dashboard card + copyable bank summary. Owner1 44/High-risk vs owner2 50.
 - FESTIVALS (Diwali x1.6, Holi x1.4, Eid/Rakhi x1.3) multiply forecast days; response adds estivals + per-day estival tag; chart shows amber chip + ReferenceArea band. 11-08 qty 38.4 vs weekday med 16.0.
-- Legacy p2..p9 all green on sqlite. Note: live LLM providers currently degraded (groq model retired 404, gemini 400) � demo_fallback carries /chat; no verify depends on live LLM.
+- Legacy p2..p9 all green on sqlite. Note: live LLM providers currently degraded (groq model retired 404, gemini 400) � demo_fallback carries /chat; no verify depends on live LLM.
 
-## PROD HARDENING v2 (2026-09-24) � P11v2 VERIFY 6/6, SKIPPED none
+## PROD HARDENING v2 (2026-09-24) � P11v2 VERIFY 6/6, SKIPPED none
 - slowapi limits (chat 30/m, otp 5/m, ingest+documents 20/m, JSON 429), CORS FRONTEND_URL only, 20MB/413 + sanitized names, uuid request_id + structlog logs, security headers, 500/404 JSON with request_id, GET /health/ready.
 - PG composite indexes (urlparse-guarded); 60s intel cache with X-Cache, invalidated on ingest/commit, doc confirm, actions generate; products + actions confirmed single-query, no N+1.
 - Grants deliberately OPEN (owner decision): anon realtime shares the grant switch with REST, REVOKE proven to kill live UI. Roadmap: per-owner RLS + backend broadcast. Legacy p2..p10 each once on sqlite, all green.
 
-## P12 UI MASTER (2026-09-24) � P12 MASTER VERIFY ALL GREEN
+## P12 UI MASTER (2026-09-24) � P12 MASTER VERIFY ALL GREEN
 - Light-first Bahi-Khata theme (Fraunces+Inter, persisted toggle), public landing with phone loop, routes restructured to /app/*, Cmd+K palette, EN/HI toggle, PWA manifest, custom 404 + error boundary.
 - Backend: only POST /chat/voice added (STT-to-orchestrate). verify_p3 9/9 once. Frontend: tsc clean, build green, curl sweep all 200 + 404 correct.
 
-## UI MASTER OVERHAUL (2026-09-24) � UI MASTER VERIFY ALL GREEN
+## UI MASTER OVERHAUL (2026-09-24) � UI MASTER VERIFY ALL GREEN
 - Voice fixed both surfaces: stt accepts webm/ogg/mp3/mp4, small-model default, pydub-wav retry, Hindi 422 reasons, duration+language logs; chat MediaRecorder UX with permission mapping, timer, waveform, shimmer; faster-whisper installed.
 - Landing 2.0: 9 sections + footer (preloader, hero living-ledger, biz marquee, scrolly-telling, bento, mini-demo, stats band, quote, final CTA), lenis smooth scroll, hide-on-scroll nav.
 - App 2.0: greeting bar, ledger cards, health stamp, KPI count-ups + sparklines, live feed, snap alerts, anomaly rows, receipt actions + confetti, file stamps, WA chat bubbles, collapsible folder-tab sidebar, torn-paper 404.
@@ -293,3 +293,14 @@ ightly_report cron; dashboard report popover.
 - Ink Line: fixed scrub-drawn emerald thread + marigold accent (gsap.context cleanup, pathLength trick, reduced-motion static). Grain overlay, ruled texture scoped to hero ledger + quote.
 - Landing 100pct English (grep proof), toggle removed; 9 sections re-crafted with distinct choreographies, expo house ease, word masks, velocity-skew marquee, magnetic CTA, VYAPAAR parallax, checkmark draw.
 - Acceptance: tsc clean, build green, 9 routes 200 + 404 correct, verify_p3 9/9 once, backend untouched. Gaps: no browser (console/390px/theme-click unverified); phone tilt per chapter simplified to masked swaps.
+
+## LANDING SAFFRON REBUILD (2026-09-24) — Phase 0 baseline audit
+
+- `npx tsc --noEmit` → exit 0, 0 errors.
+- Route sweep (dev server :3000): `/` `/login` `/register` `/app` `/app/chat` `/app/data` `/app/actions` `/admin` → all 200; `/nonexistent-route` → 404.
+- Packages: framer-motion ✓ gsap ✓ @gsap/react ✓ recharts ✓ sonner ✓ lenis ✓ canvas-confetti ✓ (no install needed).
+- tailwind.config.ts: minimal extend (fontFamily display/sans only) — will extend with saffron tokens in Phase 1.
+- app/layout.tsx: fontsource Fraunces/Inter + next/font Tiro_Devanagari_Hindi, `<Smooth>` Lenis provider, Toaster — will ADD ONLY Google Fonts link in Phase 1.
+- app/page.tsx (expert edition, emerald/Fraunces) copied to app/page.tsx.bak. Superseded `components/expert/` + LANDING_REPORT.md removed (untracked, replaced by this spec).
+- components/landing/ created. Lenis already wired globally in components/smooth.tsx with the EXACT canonical wiring (lenis.on scroll→ScrollTrigger.update, ticker ms conversion, lagSmoothing 0, reduced-motion gate) → LandingShell will NOT create a second Lenis instance (double-drive = jitter per skill).
+- Skills: R1 MagicUI SPARSE attempted, registry paths changed → MANUAL (hand-rolled count-up). R2 ReactBits CLONED+REMOVED. R3 Dub CLONED+REMOVED (reference only, no code copied). R4 GSAP skills ALREADY PRESENT (P12.9) + network re-verified. R5 web-animation-skills CLONED OK (gsap-web, scrolltrigger-lenis, svg/60fps/accessible/micro-interaction).
