@@ -1,19 +1,21 @@
 "use client";
 
 /**
- * VyapaarAI landing v2 — clean, minimal, 5 sections (S1–S5 + footer).
- * framer-motion only. Inter only. Emerald/cream/ink.
- * Anti-blank: fast subtle entrances + watchdog forcing stuck nodes visible.
+ * VyapaarAI storytelling landing — Ramesh's journey in 6 beats.
+ * Lottie-first (doodle fallbacks: 0 JSONs downloadable headless),
+ * framer-motion reveals, watchdog against blank states.
  */
 
 import { useEffect } from "react";
 import Header from "@/components/landing-v2/Header";
-import Hero from "@/components/landing-v2/Hero";
-import HowItWorks from "@/components/landing-v2/HowItWorks";
-import Demo from "@/components/landing-v2/Demo";
-import Proof from "@/components/landing-v2/Proof";
-import FinalCTA from "@/components/landing-v2/FinalCTA";
 import Footer from "@/components/landing-v2/Footer";
+import Beat1Hero from "@/components/story/Beat1Hero";
+import Beat2Problem from "@/components/story/Beat2Problem";
+import Beat3Discovery from "@/components/story/Beat3Discovery";
+import Beat4Magic from "@/components/story/Beat4Magic";
+import Beat5Transformation from "@/components/story/Beat5Transformation";
+import Beat6CTA from "@/components/story/Beat6CTA";
+import ScrollProgress from "@/components/story/ScrollProgress";
 
 function Watchdog() {
   useEffect(() => {
@@ -36,13 +38,15 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen" style={{ background: "var(--paper)", color: "var(--ink)" }}>
       <Watchdog />
+      <ScrollProgress />
       <Header />
       <main>
-        <Hero />
-        <HowItWorks />
-        <Demo />
-        <Proof />
-        <FinalCTA />
+        <Beat1Hero />
+        <Beat2Problem />
+        <Beat3Discovery />
+        <Beat4Magic />
+        <Beat5Transformation />
+        <Beat6CTA />
       </main>
       <Footer />
     </div>

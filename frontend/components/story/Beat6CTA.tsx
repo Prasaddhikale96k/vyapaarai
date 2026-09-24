@@ -6,6 +6,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { LottiePlayer } from "@/components/illustrations/LottiePlayer";
 import { Munshi, Scooter } from "@/components/illustrations/doodles";
+import MagneticButton from "./MagneticButton";
 import SectionWrapper from "./SectionWrapper";
 
 const EASE: [number, number, number, number] = [0.19, 1, 0.22, 1];
@@ -42,13 +43,17 @@ export default function Beat6CTA() {
           Free for 30 days. No card. Just your WhatsApp number.
         </motion.p>
         <motion.div data-reveal {...rise(0.3)}>
-          <Link
+          <MagneticButton
             href="/register"
-            className="inline-block rounded-full px-12 py-5 text-xl font-semibold text-white transition-all hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-4"
-            style={{ background: "var(--accent)", outlineColor: "var(--accent)", textDecoration: "none" }}
+            className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-4"
           >
-            Start your free trial →
-          </Link>
+            <span
+              className="inline-block rounded-full px-12 py-5 text-xl font-semibold text-white"
+              style={{ background: "var(--accent)" }}
+            >
+              Start your free trial →
+            </span>
+          </MagneticButton>
         </motion.div>
         <motion.div data-reveal {...rise(0.45)}>
           <Link
