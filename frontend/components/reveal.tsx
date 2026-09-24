@@ -25,7 +25,9 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 gsap.registerPlugin(ScrollTrigger);
 
+/** House Bezier (R2): expo-out. GSAP string form + framer array form. */
 export const HOUSE_EASE = "expo.out";
+export const EASE_EXP: [number, number, number, number] = [0.19, 1.0, 0.22, 1.0];
 
 function motionOK() {
   return (
@@ -199,7 +201,10 @@ export function Watchdog() {
           const r = el.getBoundingClientRect();
           if (r.top >= vh || r.bottom <= 0) return;
           const op = window.getComputedStyle(el).opacity;
-          if (op === "0") el.classList.add("ink-shown");
+          if (op === "0") {
+            console.warn("WATCHDOG: force-showing", el);
+            el.classList.add("ink-shown");
+          }
         });
       } catch {
         /* never break the page for a safety net */

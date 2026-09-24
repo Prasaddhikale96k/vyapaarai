@@ -127,6 +127,26 @@ body {
   font-family: "Fraunces", Georgia, serif;
 }
 
+/* Devanagari brand word ONLY (R3): header/footer/hero-watermark/S8-ghost/S7-sign. */
+.font-devanagari {
+  font-family: var(--font-devanagari), "Tiro Devanagari Hindi", serif;
+}
+
+/* S8 emerald band, theme-aware */
+:root,
+:root[data-theme="light"] {
+  --cta-band: #059669;
+  --cta-band-ink: #ffffff;
+  --cta-btn-bg: #ffffff;
+  --cta-btn-ink: #047857;
+}
+:root[data-theme="dark"] {
+  --cta-band: #065f46;
+  --cta-band-ink: #ecfdf5;
+  --cta-btn-bg: #ecfdf5;
+  --cta-btn-ink: #065f46;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }

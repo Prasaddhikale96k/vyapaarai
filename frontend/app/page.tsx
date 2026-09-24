@@ -7,13 +7,34 @@
  * Ink identity = per-section inline segments, never a layer over content.
  */
 
+import { useGSAP } from "@gsap/react";
 import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring, useTransform, useVelocity } from "framer-motion";
+import gsap from "gsap";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { SectionInk } from "@/components/ink-line";
+import { SectionInk, VyapaarSign, VyapaarWatermark } from "@/components/ink-line";
 import { CountUp, EASE, LivingLedger, MiniDemo, ScrollyTelling, SpotCard } from "@/components/landing";
 import { DrawPath, MaskWords, Reveal, Watchdog } from "@/components/reveal";
+import { LottiePlayer } from "@/components/illustrations/LottiePlayer";
+import {
+  BiscuitPack,
+  ChaiGlass,
+  KiranaStore,
+  MasalaDabba,
+  MilkPouch,
+  Munshi,
+  OilBottle,
+  RiceSack,
+  RupeeCoins,
+  Scooter,
+  SoapBar,
+  Sparkline,
+  StampOK,
+  StampOverdue,
+  StampPaid,
+  WhatsAppPhone,
+} from "@/components/illustrations/doodles";
 import { useTheme } from "@/lib/theme";
 
 function ThemeToggle() {
@@ -31,11 +52,12 @@ function ThemeToggle() {
   );
 }
 
-/* Magnetic CTA: pulls toward cursor within 80px radius, max 6px, springs back. */
+/* Magnetic CTA (R2/#5): attracts within 220px, capped ±12px, springs back. */
 function Magnetic({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   const [pos, setPos] = useState({ x: 0, y: 0 });
+  const clamp12 = (v: number) => Math.max(-12, Math.min(12, v));
   return (
     <div
       ref={ref}
@@ -46,8 +68,8 @@ function Magnetic({ children }: { children: React.ReactNode }) {
         const dx = e.clientX - (r.left + r.width / 2);
         const dy = e.clientY - (r.top + r.height / 2);
         const d = Math.hypot(dx, dy);
-        if (d < 80) {
-          setPos({ x: (dx / 80) * 6, y: (dy / 80) * 6 });
+        if (d < 220) {
+          setPos({ x: clamp12(dx * 0.06), y: clamp12(dy * 0.06) });
         } else setPos({ x: 0, y: 0 });
       }}
       onMouseLeave={() => setPos({ x: 0, y: 0 })}
@@ -118,12 +140,31 @@ function TileViz({ kind }: { kind: string }) {
   );
 }
 
-/* S2 choreography: velocity skew clamped to ±5deg, per-row hover pause. */
+/* S2 choreography: GSAP seamless x-loop + velocity skew ±5° + hover pause.
+   SSR renders the full row statically; the loop starts mount-only. */
+const SPRINKLE = [RiceSack, OilBottle, SoapBar, BiscuitPack, MilkPouch, MasalaDabba];
+
 function VelocityMarquee({ items, reverse = false }: { items: string[]; reverse?: boolean }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const tween = useRef<gsap.core.Tween | null>(null);
   const { scrollY } = useScroll();
   const vel = useVelocity(scrollY);
   const [skew, setSkew] = useState(0);
   const reduce = useReducedMotion();
+  useGSAP(
+    () => {
+      if (reduce) return;
+      const track = trackRef.current;
+      if (!track) return;
+      if (reverse) {
+        gsap.set(track, { xPercent: -50 });
+        tween.current = gsap.to(track, { xPercent: 0, duration: 22, ease: "none", repeat: -1 });
+      } else {
+        tween.current = gsap.to(track, { xPercent: -50, duration: 22, ease: "none", repeat: -1 });
+      }
+    },
+    { scope: trackRef }
+  );
   useEffect(() => {
     if (reduce) return;
     const un = vel.on("change", (v) => {
@@ -132,23 +173,33 @@ function VelocityMarquee({ items, reverse = false }: { items: string[]; reverse?
     });
     return un;
   }, [vel, reverse, reduce]);
+  const triple = [...items, ...items, ...items];
   return (
     <div className="overflow-hidden py-1.5" style={{ transform: `skewX(${skew}deg)` }}>
       <div
-        className="marquee-track flex w-max gap-3"
-        style={{ animationDirection: reverse ? "reverse" : undefined }}
-        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.animationPlayState = "paused")}
-        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.animationPlayState = "")}
+        ref={trackRef}
+        className="flex w-max items-center gap-3"
+        onMouseEnter={() => tween.current?.pause()}
+        onMouseLeave={() => tween.current?.play()}
       >
-        {[...items, ...items, ...items, ...items].map((b, i) => (
-          <span
-            key={i}
-            className={`chip font-display ${i % 3 === 0 ? "text-base font-bold" : i % 3 === 1 ? "text-sm italic" : "text-sm"}`}
-            style={{ background: "var(--card)" }}
-          >
-            {b}
-          </span>
-        ))}
+        {triple.map((b, i) => {
+          const Doodle = SPRINKLE[(Math.floor(i / 3) + (reverse ? 3 : 0)) % SPRINKLE.length];
+          return (
+            <span key={i} className="inline-flex items-center gap-3">
+              <span
+                className={`chip font-display ${i % 3 === 0 ? "text-base font-bold" : i % 3 === 1 ? "text-sm italic" : "text-sm"}`}
+                style={{ background: "var(--card)" }}
+              >
+                {b}
+              </span>
+              {i % 3 === 2 && (
+                <span style={{ color: "var(--accent)", opacity: 0.4 }} aria-hidden="true">
+                  <Doodle className="h-8 w-8" />
+                </span>
+              )}
+            </span>
+          );
+        })}
       </div>
     </div>
   );
@@ -160,6 +211,7 @@ export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
   const [hideNav, setHideNav] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  const [stamped, setStamped] = useState(false);
   const [mx, setMx] = useState({ x: 0, y: 0 });
   const reduce = useReducedMotion();
   const { scrollYProgress, scrollY } = useScroll();
@@ -215,6 +267,8 @@ export default function Landing() {
             style={{ background: "var(--paper)", clipPath: "inset(0 0 0 0)" }}
             exit={{ clipPath: "inset(0 0 100% 0)" }}
             transition={{ duration: 0.3, ease: EASE }}
+            aria-live="polite"
+            aria-label="Loading VyapaarAI"
           >
             <svg viewBox="0 0 64 64" width="76" height="76" fill="none" aria-hidden="true">
               <motion.path d="M14 12 L32 52 L50 12" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
@@ -245,7 +299,10 @@ export default function Landing() {
               style={{ background: "var(--accent)" }}>
               V
             </span>
-            <span className="font-display text-lg font-bold">VyapaarAI</span>
+            <span className="flex flex-col leading-none">
+              <span className="font-devanagari text-xl font-bold" style={{ color: "var(--ink)" }}>व्यापार</span>
+              <span className="text-[10px] font-semibold tracking-widest" style={{ color: "var(--ink-faint)" }}>VYAPAARAI</span>
+            </span>
           </Link>
           <div className="ml-auto hidden items-center gap-5 text-sm md:flex" style={{ color: "var(--ink-soft)" }}>
             <a href="#features" className="rounded px-1 py-2 hover:opacity-70 active:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2" style={{ outlineColor: "var(--accent)" }}>Features</a>
@@ -276,6 +333,7 @@ export default function Landing() {
       >
         <div className="pointer-events-none absolute inset-0" aria-hidden
           style={{ background: `radial-gradient(520px circle at ${50 + mx.x * 26}% ${32 + mx.y * 18}%, var(--marigold-soft), transparent 70%)`, opacity: 0.5 }} />
+        <VyapaarWatermark className="pointer-events-none absolute left-1/2 top-16 w-[min(90vw,760px)] -translate-x-1/2 opacity-100" />
         <SectionInk className="left-2 top-24 hidden w-40 md:block" viewBox="0 0 160 500"
           d="M80,10 C110,90 50,160 75,240 C100,320 55,400 80,490" />
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-6 pb-16 pt-6 md:grid-cols-2 md:pt-12">
@@ -336,15 +394,45 @@ export default function Landing() {
             </p>
           </div>
           <Reveal variant="rise" delay={0.1}>
-            <LivingLedger />
+            <div className="relative">
+              <LivingLedger />
+              <div className="absolute -right-4 -top-10 hidden sm:block" style={{ color: "var(--ink)" }} aria-hidden="true">
+                <LottiePlayer
+                  name="hero"
+                  fallback={<KiranaStore className="h-24 w-32" />}
+                  className="h-24 w-40"
+                />
+              </div>
+            </div>
+          </Reveal>
+          <Reveal variant="rise" delay={0.2}>
+            <div className="mx-auto flex w-full max-w-[380px] items-center gap-3 pt-4">
+              <span style={{ color: "var(--accent)" }} aria-hidden="true">
+                <RupeeCoins className="h-14 w-14" />
+              </span>
+              <p className="text-sm" style={{ color: "var(--ink-soft)" }}>
+                <span className="tnum font-display text-2xl font-bold" style={{ color: "var(--ink)" }}>
+                  <CountUp value={2847} />
+                </span>
+                <br />
+                voice entries processed
+              </p>
+            </div>
           </Reveal>
         </div>
       </section>
 
       {/* S2 marquee — layers: tinted band + two rows + ink swash accent */}
-      <section id="s2" className="relative z-[2] overflow-hidden border-y py-4" style={{ borderColor: "var(--card-border)", background: "var(--card)" }}>
-        <VelocityMarquee items={BIZ1} />
-        <VelocityMarquee items={BIZ2} reverse />
+      <section id="s2" className="relative z-[2] overflow-hidden border-y py-10" style={{ borderColor: "var(--card-border)", background: "var(--accent-soft)" }}>
+        <Reveal variant="rise">
+          <h2 className="font-display mx-auto max-w-3xl px-6 text-center text-2xl font-semibold md:text-3xl" style={{ color: "var(--ink)" }}>
+            Built for every corner of Bharat&apos;s retail heart.
+          </h2>
+        </Reveal>
+        <div className="mt-6">
+          <VelocityMarquee items={BIZ1} />
+          <VelocityMarquee items={BIZ2} reverse />
+        </div>
         <SectionInk className="ink-complex left-1/2 top-1/2 w-[420px] -translate-x-1/2 -translate-y-1/2 opacity-40" viewBox="0 0 420 60"
           d="M10,38 C 120,20 300,52 410,28" duration={1.6} />
       </section>
@@ -377,10 +465,13 @@ export default function Landing() {
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Reveal variant="rise" className="sm:col-span-2 lg:row-span-2">
               <SpotCard className="h-full">
-                <span className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                  style={{ background: "var(--marigold)" }}>
-                  44 → 88
-                </span>
+                <div className="absolute right-3 top-3 flex items-center gap-2">
+                  <StampPaid />
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                    style={{ background: "var(--marigold)" }}>
+                    44 → 88
+                  </span>
+                </div>
                 <h3 className="card-title font-display text-lg">Health 44 to 88 in 19 days</h3>
                 <p className="card-sub mt-1">Dues collected. Dead stock cleared. The line only climbs.</p>
                 <svg viewBox="0 0 320 120" className="mt-3 w-full" fill="none" aria-hidden="true">
@@ -396,10 +487,18 @@ export default function Landing() {
             {BENTO.map((f, i) => (
               <Reveal key={f.t} variant="rise" delay={(i % 3) * 0.06}>
                 <SpotCard>
-                  <span className="absolute right-3 top-3 rounded-full border px-2 py-0.5 text-[10px] font-bold"
-                    style={{ borderColor: "var(--card-border)", color: "var(--ink-faint)" }}>
-                    {f.stamp}
-                  </span>
+                  <div className="absolute right-3 top-3">
+                    {f.viz === "upi" ? (
+                      <StampOverdue />
+                    ) : f.viz === "live" ? (
+                      <StampOK />
+                    ) : (
+                      <span className="rounded-full border px-2 py-0.5 text-[10px] font-bold"
+                        style={{ borderColor: "var(--card-border)", color: "var(--ink-faint)" }}>
+                        {f.stamp}
+                      </span>
+                    )}
+                  </div>
                   <h3 className="card-title font-display pr-20 text-lg">{f.t}</h3>
                   <p className="card-sub mt-1">{f.d}</p>
                   <TileViz kind={f.viz} />
@@ -421,10 +520,18 @@ export default function Landing() {
         <div className="relative mt-5">
           <SectionInk className="ink-complex -left-16 top-16 hidden w-24 md:block" viewBox="0 0 100 300"
             d="M60,10 C 40,90 80,170 55,290" />
+          <div className="absolute -right-6 -top-14 hidden md:block" style={{ color: "var(--ink)" }} aria-hidden="true">
+            <LottiePlayer name="chat" fallback={<WhatsAppPhone className="h-28 w-16" />} className="h-28 w-40" />
+          </div>
           <MiniDemo />
-          <p className="card-sub mt-2 text-center">
-            All of this runs on WhatsApp. No app install.
-          </p>
+          <div className="mt-3 flex items-end justify-between gap-3">
+            <span style={{ color: "var(--accent)" }} aria-hidden="true">
+              <Munshi className="h-20 w-20" />
+            </span>
+            <p className="card-sub pb-2 text-right">
+              All of this runs on WhatsApp. No app install.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -433,12 +540,28 @@ export default function Landing() {
         <div className="h-1" style={{ background: "var(--marigold)" }} aria-hidden="true" />
         <div className="mx-auto grid max-w-7xl gap-8 px-6 py-14 text-center sm:grid-cols-2 lg:grid-cols-4" style={{ color: "#FAF7F2" }}>
           {[
-            { v: 53400, prefix: "Rs.", label: "overdue caught" },
-            { v: 18, prefix: "", label: "SKUs flagged low-stock" },
-            { v: 88, prefix: "", label: "health score in 19 days", raw: true },
-            { v: 2847, prefix: "", label: "voice entries processed" },
+            { v: 2847, prefix: "", label: "voice entries processed", doodle: "spark" },
+            { v: 53400, prefix: "Rs.", label: "overdue caught", doodle: "coins" },
+            { v: 18, prefix: "", label: "SKUs flagged low-stock", doodle: "goods" },
+            { v: 88, prefix: "", label: "health score in 19 days", raw: true, doodle: "arrow" },
           ].map((s) => (
             <div key={s.label}>
+              <div className="mb-2 flex h-12 items-end justify-center gap-2" style={{ color: "#10B981" }} aria-hidden="true">
+                {s.doodle === "spark" && <Sparkline className="h-8 w-24" />}
+                {s.doodle === "coins" && <RupeeCoins className="h-12 w-12" />}
+                {s.doodle === "goods" && (
+                  <>
+                    <BiscuitPack className="h-10 w-10" />
+                    <SoapBar className="h-10 w-10" />
+                    <MasalaDabba className="h-10 w-10" />
+                  </>
+                )}
+                {s.doodle === "arrow" && (
+                  <svg viewBox="0 0 100 30" className="h-8 w-24" fill="none">
+                    <DrawPath d="M6 24 L60 24 L88 24 M70 14 L90 24 L70 30" stroke="#FBBF24" width={3} duration={0.8} />
+                  </svg>
+                )}
+              </div>
               <Reveal variant="clip">
                 <p className="font-display tnum overflow-hidden text-4xl font-bold md:text-5xl" style={{ color: "#FBBF24" }}>
                   {"raw" in s && s.raw ? (
@@ -465,64 +588,95 @@ export default function Landing() {
               style={{ background: "var(--marigold-soft)", color: "var(--marigold)" }}>
               FIELD NOTE
             </span>
+            <span className="absolute right-4 top-2" style={{ color: "var(--marigold)" }} aria-hidden="true">
+              <ChaiGlass className="h-20 w-14" />
+            </span>
             <div className="text-lg tracking-widest" style={{ color: "var(--marigold)" }} aria-hidden="true">★★★★★</div>
             <p className="font-display mt-3 text-2xl italic leading-snug">
               <MaskWords text={QUOTE} />
             </p>
             <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: "var(--ink-faint)", letterSpacing: "0.1em" }}>
-              VyapaarAI · Built for Bharat
+              <span className="font-devanagari text-sm normal-case tracking-normal">व्यापार AI</span> · BUILT FOR BHARAT
             </p>
             <svg viewBox="0 0 160 40" width="150" height="38" fill="none" className="mx-auto mt-1" aria-hidden="true">
               <DrawPath d="M10 28 C 40 28, 45 8, 70 18 S 100 34, 150 12" stroke="var(--ink-line)" width={2} duration={1.2} />
             </svg>
+            <VyapaarSign className="absolute bottom-2 right-3 h-12 w-32" />
           </div>
         </Reveal>
       </section>
 
-      {/* S8 final CTA — layers: ghost parallax + copy + magnetic CTA + ink check */}
-      <section id="s8" className="relative z-[2] overflow-hidden">
+      {/* S8 final CTA — emerald band + ghost व्यापार parallax + magnetic CTA + stamp */}
+      <section id="s8" className="relative z-[2] overflow-hidden" style={{ background: "var(--cta-band)", color: "var(--cta-band-ink)" }}>
         <motion.div
-          className="font-display pointer-events-none absolute inset-x-0 top-6 whitespace-nowrap text-center font-bold leading-none"
-          style={{ fontSize: "21vw", opacity: 0.06, WebkitTextStroke: "2px var(--ink)", color: "transparent" }}
+          className="font-devanagari pointer-events-none absolute inset-x-0 top-6 whitespace-nowrap text-center font-bold leading-none"
+          style={{ fontSize: "20rem", opacity: 0.08, WebkitTextStroke: "1px var(--cta-band-ink)", color: "transparent" }}
           aria-hidden="true"
         >
           <motion.span style={{ y: ctaY }} className="inline-block">
-            VYAPAAR AI
+            व्यापार
           </motion.span>
         </motion.div>
-        <div className="relative mx-auto max-w-3xl px-6 py-20 text-center">
+        <div className="relative mx-auto max-w-3xl px-6 py-24 text-center lg:py-32">
           <Reveal variant="rise">
             <h2 className="font-display text-4xl font-bold md:text-6xl">
-              <MaskWords text="Start with one WhatsApp message." />
+              <MaskWords text="Run your shop on intelligence." />
             </h2>
           </Reveal>
-          <p className="card-sub mx-auto mt-3 max-w-md">Your ledger is waiting. Run your shop on intelligence.</p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <p className="mx-auto mt-4 max-w-md text-lg opacity-90">Join 1,000+ MSMEs already growing with VyapaarAI.</p>
+          <div
+            className="mt-8 flex flex-wrap items-center justify-center gap-4"
+            onMouseEnter={() => setStamped(true)}
+            onMouseLeave={() => setStamped(false)}
+          >
             <Magnetic>
               <motion.div whileTap={{ scale: 0.98 }} className="inline-flex items-center gap-2">
-                <Link href="/register" className="btn-primary inline-flex min-h-[44px] items-center hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4" style={{ textDecoration: "none", outlineColor: "var(--accent)" }}>Register your shop</Link>
-                <svg viewBox="0 0 24 24" width="30" height="30" fill="none" aria-hidden="true">
-                  <DrawPath d="M4 13 L10 19 L20 6" stroke="var(--accent)" width={3.5} duration={0.5} delay={0.3} />
-                </svg>
+                <Link
+                  href="/register"
+                  className="inline-flex min-h-[44px] items-center rounded-full px-10 py-4 text-lg font-semibold hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4"
+                  style={{ background: "var(--cta-btn-bg)", color: "var(--cta-btn-ink)", textDecoration: "none", outlineColor: "#fff" }}
+                >
+                  Start your free trial
+                </Link>
               </motion.div>
             </Magnetic>
-            <Link href="/login" className="btn-ghost inline-flex min-h-[44px] items-center hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-4" style={{ textDecoration: "none", outlineColor: "var(--accent)" }}>Login</Link>
+            <span className="relative inline-flex h-16 w-16 items-center justify-center" aria-hidden="true">
+              <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" fill="none">
+                <circle cx="32" cy="32" r="26" stroke="var(--cta-btn-bg)" strokeWidth="2" opacity="0.5" strokeDasharray="4 5" />
+              </svg>
+              <motion.span
+                className="font-display text-4xl font-bold"
+                style={{ color: "var(--cta-btn-bg)" }}
+                initial={false}
+                animate={stamped ? { scale: [0, 1.1, 1], rotate: -5 } : { scale: 1, rotate: 0 }}
+                transition={{ duration: stamped ? 0.4 : 0.2, ease: EASE }}
+              >
+                ✓
+              </motion.span>
+            </span>
+          </div>
+          <div className="mt-4 flex items-end justify-center gap-2 opacity-90" aria-hidden="true">
+            <Munshi className="h-16 w-16" />
+            <Scooter className="h-10 w-24" />
           </div>
           <Reveal variant="rise">
-            <div className="mt-6 inline-block rounded-2xl border p-3" style={{ borderColor: "var(--card-border)", background: "var(--card)" }}>
+            <div className="mt-6 inline-block rounded-2xl p-3" style={{ background: "var(--card)" }}>
               <QRCodeSVG value={siteUrl} size={120} />
             </div>
           </Reveal>
         </div>
       </section>
 
-      {/* footer — only real routes, dense columns, no dead links */}
+      {/* footer — व्यापार brand, real routes only, ink rule on top */}
       <footer className="relative z-[2] border-t" style={{ borderColor: "var(--card-border)" }}>
+        <svg viewBox="0 0 1200 8" className="block h-1 w-full" preserveAspectRatio="none" fill="none" aria-hidden="true">
+          <DrawPath d="M0 4 L1200 4" stroke="var(--ink-line)" width={2} duration={1.2} />
+        </svg>
         <div className="mx-auto grid max-w-7xl gap-6 px-6 py-10 text-sm md:grid-cols-4" style={{ color: "var(--ink-soft)" }}>
           <div>
-            <p className="font-display text-lg font-bold" style={{ color: "var(--ink)" }}>VyapaarAI</p>
-            <p className="card-sub mt-1">Your shop runs on udhaari. Run it on intelligence.</p>
-            <p className="card-sub mt-2">© 2026 VyapaarAI · Built for Bharat</p>
+            <p className="font-devanagari text-xl font-bold" style={{ color: "var(--ink)" }}>व्यापार AI</p>
+            <p className="card-sub mt-1">Intelligence for Bharat&apos;s MSMEs.</p>
+            <p className="card-sub mt-2">© 2026 VyapaarAI</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--ink-faint)" }}>Product</p>

@@ -11,8 +11,9 @@
 import { animate, AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { DrawPath } from "@/components/reveal";
+import { Munshi, Scooter, UdhaarKhata, WhatsAppPhone } from "@/components/illustrations/doodles";
 
-export const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+export const EASE: [number, number, number, number] = [0.19, 1.0, 0.22, 1.0];
 
 /* Product mock strings: Hindi replies live ONLY inside phone/WhatsApp previews
    (language-sweep exception). All marketing copy outside mocks is English. */
@@ -140,146 +141,185 @@ export function PhoneMockup() {
   );
 }
 
-/* Mini-demo: English questions, product-truth answers.
-   SSR shows the full first answer; client enhances with word reveal + typing. */
-const DEMO_QA: [string, string][] = [
-  ["Why did profit dip?", "Purchases up 12% and Rs.53,400 stuck in credit. Margin 15% to 11%. Collect dues first."],
-  ["When does stock run out?", "Sugar 1kg lasts about 3 days at 17 per day. Reorder today."],
-  ["How much credit is pending?", "Rs.53,400 across 3 invoices. Largest: Sunita Devi Rs.32,500."],
-  ["Which product should I drop?", "Haldiram Namkeen: zero sales in 45 days, 40 units idle. Run clearance."],
+/* S5 mini-demo: scripted WhatsApp exchange (Hindi in bubbles = mock exception).
+   SSR shows all four bubbles fully; client auto-plays typing + thinking dots
+   + one backspace correction, with replay. */
+type Bubble = { from: "user" | "ai"; text: string; fix?: boolean; badge?: string };
+const CHAT_SCRIPT: Bubble[] = [
+  { from: "user", text: "Aaj kitna sale hua?" },
+  { from: "ai", text: "Today's sale: Rs.18,450. Top itme|FIX|: Aashirvaad Atta (22 units).", fix: true },
+  { from: "user", text: "Stock check karo Tata Salt" },
+  { from: "ai", text: "Tata Salt: 8 kg left. Reorder in 3 days.", badge: "LOW STOCK" },
 ];
 
-const TYPING_TARGET = "reorder 10kg sugar";
-const TYPING_MISTAKE = "reorder 10kg sug";
-
 export function MiniDemo() {
-  const [active, setActive] = useState(0);
-  const [words, setWords] = useState<number | null>(null); // null = show full (SSR + reduced)
-  const [typedQ, setTypedQ] = useState(TYPING_TARGET);
   const reduce = useReducedMotion();
-  const full = DEMO_QA[active][1].split(" ");
+  const inViewRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(inViewRef, { once: true, margin: "-80px" });
+  const [played, setPlayed] = useState(false); // false = show full script (SSR/static)
+  const [bubbles, setBubbles] = useState<string[]>(CHAT_SCRIPT.map((b) => b.text.replace("|FIX|", "m")));
+  const [thinking, setThinking] = useState(false);
+  const [runId, setRunId] = useState(0);
 
-  /* Answer reveal: word-by-word with natural pauses at punctuation. */
   useEffect(() => {
-    if (reduce) {
-      setWords(null);
-      return;
-    }
-    setWords(0);
-    let i = 0;
-    let cancelled = false;
-    let t: ReturnType<typeof setTimeout>;
-    const step = () => {
-      if (cancelled) return;
-      i += 1;
-      setWords(i);
-      if (i >= full.length) return;
-      const w = full[i - 1] ?? "";
-      const pause = /[.?!.…]$/.test(w) ? 420 : w.length <= 3 ? 70 : 130;
-      t = setTimeout(step, pause);
-    };
-    t = setTimeout(step, 350);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
+    if (!inView || reduce || played) return;
+    setPlayed(true);
+    setRunId((r) => r + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, reduce]);
+  }, [inView, reduce]);
 
-  /* Query typing with human rhythm + one backspace correction. */
   useEffect(() => {
-    if (reduce) {
-      setTypedQ(TYPING_TARGET);
-      return;
-    }
+    if (!played || reduce) return;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    const schedule = (fn: () => void, ms: number) => {
-      const t = setTimeout(() => {
-        if (!cancelled) fn();
-      }, ms);
-      timers.push(t);
+    const later = (fn: () => void, ms: number) => {
+      timers.push(
+        setTimeout(() => {
+          if (!cancelled) fn();
+        }, ms)
+      );
     };
-    let at = 300;
-    for (let c = 1; c <= TYPING_MISTAKE.length; c++) {
-      const burst = c % 4 === 0 ? 260 : 55 + (c % 3) * 40;
-      at += burst;
-      const n = c;
-      schedule(() => setTypedQ(TYPING_MISTAKE.slice(0, n)), at);
-    }
-    at += 550; // thinking pause before correction
-    for (let c = TYPING_MISTAKE.length - 1; c >= TYPING_MISTAKE.length - 3; c--) {
-      at += 90;
-      const n = c;
-      schedule(() => setTypedQ(TYPING_MISTAKE.slice(0, n)), at);
-    }
-    at += 220;
-    ["a", "ar"].forEach((suf) => {
-      at += 140;
-      schedule(() => setTypedQ(TYPING_MISTAKE.slice(0, TYPING_MISTAKE.length - 3) + suf), at);
+    const typeBubble = (idx: number, at: number): number => {
+      const b = CHAT_SCRIPT[idx];
+      if (b.from === "ai") {
+        later(() => setThinking(true), at);
+        at += 800;
+        later(() => setThinking(false), at);
+      }
+      const fixAt = b.fix ? b.text.indexOf("|FIX|") : -1;
+      const mistake = fixAt >= 0 ? b.text.slice(0, fixAt) : b.text;
+      const final = b.text.replace("|FIX|", "m");
+      let t = at;
+      const seq = (s: string, base: number) => {
+        for (let c = 0; c < s.length; c++) {
+          const ch = s[c];
+          base += ch === " " ? 200 : 100 + ((c * 53 + idx * 29) % 60);
+          const snap = s.slice(0, c + 1);
+          later(
+            () =>
+              setBubbles((arr) => {
+                const n = [...arr];
+                n[idx] = snap;
+                return n;
+              }),
+            base
+          );
+        }
+        return base;
+      };
+      t = seq(mistake, t);
+      if (fixAt >= 0) {
+        t += 250;
+        for (let n = mistake.length - 1; n >= mistake.length - 4; n--) {
+          t += 100;
+          const snap = mistake.slice(0, n);
+          later(
+            () =>
+              setBubbles((arr) => {
+                const n2 = [...arr];
+                n2[idx] = snap;
+                return n2;
+              }),
+            t
+          );
+        }
+        t += 120;
+        const stem = mistake.slice(0, mistake.length - 4);
+        for (const suf of ["i", "it", "ite", "item"]) {
+          t += 130;
+          const snap = stem + suf;
+          later(
+            () =>
+              setBubbles((arr) => {
+                const n2 = [...arr];
+                n2[idx] = snap;
+                return n2;
+              }),
+            t
+          );
+        }
+        t = seq(final.slice(stem.length + 4), t + 150);
+      }
+      return t + 700;
+    };
+    setBubbles(CHAT_SCRIPT.map(() => ""));
+    setThinking(false);
+    let at = 400;
+    CHAT_SCRIPT.forEach((_, i) => {
+      at = typeBubble(i, at);
     });
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
     };
-  }, [active, reduce]);
-
-  const shown = words === null ? full : full.slice(0, words);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, reduce]);
 
   return (
-    <div>
-      <div className="mb-3 flex flex-wrap gap-2">
-        {DEMO_QA.map(([q], i) => (
-          <motion.button
-            key={q}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setActive(i)}
-            className="min-h-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={
-              active === i
-                ? { background: "var(--accent)", color: "#fff", borderColor: "var(--accent)", outlineColor: "var(--accent)" }
-                : { borderColor: "var(--card-border)", color: "var(--ink-soft)" }
-            }
-          >
-            {q}
-          </motion.button>
-        ))}
+    <div ref={inViewRef}>
+      <div className="card space-y-2 p-4" style={{ minHeight: 300 }} aria-live="polite">
+        {CHAT_SCRIPT.map((b, i) => {
+          const txt = played && !reduce ? bubbles[i] : b.text.replace("|FIX|", "m");
+          if (!txt && played && !reduce) return null;
+          const mine = b.from === "user";
+          return (
+            <div key={i} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div
+                className="max-w-[85%] rounded-2xl px-3 py-2 text-sm"
+                style={
+                  mine
+                    ? { background: "var(--accent)", color: "#fff", borderBottomRightRadius: 4 }
+                    : {
+                        background: "var(--paper)",
+                        color: "var(--ink)",
+                        border: "1px solid var(--card-border)",
+                        borderBottomLeftRadius: 4,
+                      }
+                }
+              >
+                {txt}
+                {b.badge && txt.length === b.text.length && (
+                  <span
+                    className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{ background: "var(--marigold-soft)", color: "var(--marigold)" }}
+                  >
+                    {b.badge}
+                  </span>
+                )}
+                {played && !reduce && i === CHAT_SCRIPT.length - 1 && txt.length < b.text.length && (
+                  <span className="animate-pulse">▍</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {thinking && (
+          <div className="flex justify-start">
+            <div className="flex gap-1 rounded-2xl border px-3 py-2" style={{ borderColor: "var(--card-border)" }}>
+              {[0, 1, 2].map((d) => (
+                <motion.span
+                  key={d}
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ repeat: Infinity, duration: 0.8, delay: d * 0.2 }}
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ background: "var(--ink-faint)" }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-      {/* Typing line with realistic caret + backspace correction */}
-      <div className="card mb-3 flex items-center gap-2" style={{ background: "var(--accent-soft)" }}>
-        <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
-          You
-        </span>
-        <p className="text-sm" style={{ color: "var(--ink)" }} aria-live="polite">
-          {typedQ}
-          <span className="animate-pulse" aria-hidden="true">
-            ▍
-          </span>
-        </p>
-      </div>
-      <div className="card" style={{ minHeight: 132 }}>
-        <div className="mb-2 flex gap-1">
-          {["Sales", "Stock", "Finance"].map((s, si) => (
-            <motion.span
-              key={s}
-              animate={{ scale: [1, 1.12, 1], opacity: [0.75, 1, 0.75] }}
-              transition={{ repeat: Infinity, duration: 1.8, delay: si * 0.3, ease: EASE }}
-              className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-              style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
-            >
-              {s} ✓
-            </motion.span>
-          ))}
-        </div>
-        <p className="text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
-          {shown.map((w, i) => (
-            <span key={`${active}-${i}`} className="inline-block">
-              {w}
-              {i < shown.length - 1 ? " " : ""}
-            </span>
-          ))}
-          {words !== null && words < full.length && <span className="animate-pulse">▍</span>}
-        </p>
+      <div className="mt-2 text-center">
+        <button
+          onClick={() => {
+            setPlayed(true);
+            setRunId((r) => r + 1);
+          }}
+          className="card-sub min-h-[44px] rounded-full border px-4 font-semibold hover:opacity-70 active:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+          style={{ borderColor: "var(--card-border)", outlineColor: "var(--accent)" }}
+        >
+          Replay demo
+        </button>
       </div>
     </div>
   );
@@ -342,16 +382,22 @@ export function SpotCard({ children, className = "" }: { children: React.ReactNo
   );
 }
 
-/* Living ledger: SSR shows all rows + answer statically. Client cycles them
-   with human rhythm; ruled lines draw (mount-only) just before each entry. */
-const LEDGER_ROWS = ["Ramesh — Rs.8,500 on credit", "Sugar 40kg — sold out", "Chai stock — reorder?"];
+/* Living ledger: SSR shows all rows + answer statically. Client types each
+   entry with human rhythm (100-150ms/char, mid-word pause, one backspace
+   correction on entry 3: "alrt" -> "alert"); ruled lines draw just before. */
+const LEDGER_ROWS = [
+  "20 Aashirvaad Atta 5kg — Rs.6,200 — 9:41 AM",
+  "Udhaari: Ramesh paid Rs.1,500 — 10:03 AM",
+  "Low stock alrt|FIX|: Tata Salt — 11:22 AM",
+  "आज की बिक्री: Rs.18,450 — 6:38 PM",
+];
 const LEDGER_AI = "Profit -21.8%. Cause: purchases +12%, Rs.53,400 stuck in credit.";
-
-const LEDGER_TIMING = [500, 2000, 3900];
 
 export function LivingLedger() {
   const reduce = useReducedMotion();
-  const [visible, setVisible] = useState(3);
+  const [done, setDone] = useState<string[]>(LEDGER_ROWS.map((r) => r.replace("|FIX|", "e")));
+  const [typing, setTyping] = useState("");
+  const [rowIdx, setRowIdx] = useState(LEDGER_ROWS.length);
   const [showAi, setShowAi] = useState(true);
   const [typed, setTyped] = useState(LEDGER_AI.length);
   const [enhanced, setEnhanced] = useState(false);
@@ -361,27 +407,93 @@ export function LivingLedger() {
     if (reduce) return;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    const later = (fn: () => void, ms: number) => {
+      const t = setTimeout(() => {
+        if (!cancelled) fn();
+      }, ms);
+      timers.push(t);
+    };
+    const typeRow = (idx: number, at: number): number => {
+      const raw = LEDGER_ROWS[idx];
+      const fixAt = raw.indexOf("|FIX|");
+      const target = raw.replace("|FIX|", "e");
+      let cur = "";
+      let t = at;
+      const mistake = fixAt >= 0 ? raw.slice(0, fixAt) : target;
+      for (let c = 0; c < mistake.length; c++) {
+        const ch = mistake[c];
+        t += ch === " " ? 200 : 100 + ((c * 37 + idx * 11) % 50);
+        const n = c + 1;
+        const snap = mistake.slice(0, n);
+        later(() => {
+          setRowIdx(idx);
+          setTyping(snap);
+        }, t);
+      }
+      if (fixAt >= 0) {
+        t += 250;
+        for (let n = mistake.length - 1; n >= mistake.length - 4; n--) {
+          t += 90;
+          const snap = mistake.slice(0, n);
+          later(() => setTyping(snap), t);
+        }
+        t += 120;
+        for (const suf of ["a", "al", "ale", "aler", "alert"]) {
+          t += 130;
+          const snap = mistake.slice(0, mistake.length - 4) + suf;
+          later(() => setTyping(snap), t);
+        }
+        t += 200;
+        const rest = target.slice(mistake.length - 4 + 5);
+        for (let c = 0; c < rest.length; c++) {
+          t += 110;
+          const snap = mistake.slice(0, mistake.length - 4) + "alert" + rest.slice(0, c + 1);
+          later(() => setTyping(snap), t);
+        }
+      } else {
+        const rest = target.slice(mistake.length);
+        for (let c = 0; c < rest.length; c++) {
+          t += rest[c] === " " ? 200 : 120;
+          const snap = mistake + rest.slice(0, c + 1);
+          later(() => setTyping(snap), t);
+        }
+      }
+      t += 800;
+      later(() => {
+        setDone((d) => {
+          const n = [...d];
+          n[idx] = target;
+          return n;
+        });
+        setRowIdx(idx + 1);
+        setTyping("");
+      }, t);
+      return t;
+    };
     const loop = () => {
-      setVisible(0);
-      setShowAi(false);
+      // No full clear: rows clear one-by-one just before retyping (never blank).
+      setTyping("");
+      setRowIdx(0);
       setTyped(0);
-      LEDGER_TIMING.forEach((at, i) => {
-        timers.push(
-          setTimeout(() => {
-            if (!cancelled) setVisible(i + 1);
-          }, at)
+      let at = 2500;
+      LEDGER_ROWS.forEach((_, i) => {
+        later(
+          () =>
+            setDone((d) => {
+              const n = [...d];
+              n[i] = "";
+              return n;
+            }),
+          Math.max(0, at - 60)
         );
+        at = typeRow(i, at);
       });
-      timers.push(
-        setTimeout(() => {
-          if (!cancelled) setShowAi(true);
-        }, 5400)
-      );
+      later(() => setShowAi(true), at + 400);
     };
     loop();
     const cycle = setInterval(() => {
       if (!cancelled) loop();
-    }, 9000);
+    }, 14000);
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
@@ -410,24 +522,18 @@ export function LivingLedger() {
           <DrawPath key={y} d={`M8 ${y} L312 ${y}`} stroke="var(--accent)" width={1} duration={0.3} />
         ))}
       </svg>
-      <div className="-mt-28 space-y-4 px-2" aria-live="polite">
-        {LEDGER_ROWS.map((row, i) => {
-          const on = !enhanced || visible > i;
-          return (
-            <p
-              key={row}
-              className="font-display text-[15px] italic transition-all duration-500"
-              style={{
-                color: "var(--ink)",
-                opacity: on ? 1 : 0,
-                transform: on ? "none" : "translateX(-10px)",
-                transitionTimingFunction: "cubic-bezier(0.16,1,0.3,1)",
-              }}
-            >
-              {row}
-            </p>
-          );
-        })}
+      <div className="-mt-28 min-h-[104px] space-y-4 px-2" aria-live="polite">
+        {done.map((row) => (
+          <p key={row} className="font-display text-[15px] italic" style={{ color: "var(--ink)" }}>
+            {row}
+          </p>
+        ))}
+        {enhanced && rowIdx < LEDGER_ROWS.length && (
+          <p className="font-display text-[15px] italic" style={{ color: "var(--ink)" }}>
+            {typing}
+            <span className="animate-pulse" aria-hidden="true">▍</span>
+          </p>
+        )}
       </div>
       {showAi && (
         <div
@@ -492,6 +598,12 @@ export function ScrollyTelling({ onChapter }: { onChapter?: (i: number) => void 
               </span>
               <p className="font-display relative text-xl font-bold" style={{ color: "var(--ink)" }}>{c.t}</p>
               <p className="card-sub relative mt-1">{c.d}</p>
+              <div className="relative mt-3" style={{ color: "var(--accent)" }} aria-hidden="true">
+                {i === 0 && <WhatsAppPhone className="h-20 w-14" />}
+                {i === 1 && <Munshi className="h-20 w-20" />}
+                {i === 2 && <UdhaarKhata className="h-20 w-20" />}
+                {i === 3 && <Scooter className="h-16 w-28" />}
+              </div>
             </motion.div>
           ))}
         </div>
