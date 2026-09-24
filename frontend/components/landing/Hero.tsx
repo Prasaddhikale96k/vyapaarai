@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * [02] HERO — "Your Kirana's AI Brain — On WhatsApp."
+ * [02] HERO — "Your Business's AI Brain — On WhatsApp."
  * Masked line reveals (transform only), sub-headline 0.3→1, CTAs, trust row,
  * KiranaShopSVG centerpiece, scroll hint. All content SSR-visible.
  */
@@ -17,7 +17,7 @@ import { EASE_EXPO, prefersReduced, scrollToId } from "./gsap-setup";
 gsap.registerPlugin(ScrollTrigger);
 
 const LINES: { text: string; accent?: boolean; italic?: boolean }[] = [
-  { text: "Your Kirana's" },
+  { text: "Your Business's" },
   { text: "AI Brain", accent: true, italic: true },
   { text: "on WhatsApp." },
 ];
@@ -95,8 +95,9 @@ export default function Hero() {
           className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl"
           style={{ color: "#4A3728" }}
         >
-          Send a photo. Send a voice note. VyapaarAI reads it, records it, and tells
-          you what to do next — in your language, on WhatsApp.
+          Kirana, pharmacy, hardware, garments — send a photo or a voice note.
+          VyapaarAI reads it, records it, and tells you what to do next — in
+          your language, on WhatsApp.
         </p>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -123,7 +124,7 @@ export default function Hero() {
         </div>
 
         <p data-gsap="trust" className="mt-4 text-sm" style={{ color: "#8B7355" }}>
-          Trusted by kirana owners across India · Zero setup · Your language
+          Trusted by MSME owners across India · Zero setup · Your language
         </p>
 
         <div className="mt-10">

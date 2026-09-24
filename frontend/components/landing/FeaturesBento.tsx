@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * [08] FEATURES BENTO — "Everything a Kirana Needs. Nothing It Doesn't."
+ * [08] FEATURES BENTO — "Everything Your Business Needs. Nothing It Doesn't."
  * Asymmetric 12-col grid (7+5 / 4+4+4 / 5+7), HTML table mocks, SVG gauge arc
  * (r=70, draws to 88%), CSS mic pulse. Non-functional buttons are disabled
  * display-only with tooltips. SSR fully visible.
@@ -146,7 +146,7 @@ export default function FeaturesBento() {
     <section id="features" aria-labelledby="features-heading" ref={root} className="px-4 py-24 lg:py-32" style={{ background: "#FDFAF4" }}>
       <div className="mx-auto max-w-7xl">
         <h2 id="features-heading" className="font-display mx-auto max-w-3xl text-center text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl" style={{ color: "#1A1209" }}>
-          Everything a Kirana Needs. <span style={{ color: "#E8771A" }}>Nothing It Doesn&apos;t.</span>
+          Everything Your Business Needs. <span style={{ color: "#E8771A" }}>Nothing It Doesn&apos;t.</span>
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-lg" style={{ color: "#4A3728" }}>
           Built for the 7 crore MSMEs that existing software forgot.

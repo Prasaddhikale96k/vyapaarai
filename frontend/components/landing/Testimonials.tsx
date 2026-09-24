@@ -20,7 +20,7 @@ const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const QUOTES = [
   {
     text: "Before, I'd find out my losses at month's end. Now I know every morning.",
-    name: "Rajesh S., Kirana Owner, Pune (Beta Tester)",
+    name: "Rajesh S., Store Owner, Pune (Beta Tester)",
   },
   {
     text: "The udhaari reminder feature alone paid for itself. ₹53,400 was just sitting there.",

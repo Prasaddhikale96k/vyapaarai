@@ -60,7 +60,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col items-center justify-between gap-3 text-xs md:flex-row" style={{ color: "rgba(253,250,244,0.3)" }}>
-          <p>© 2025 VyapaarAI. Built for India&apos;s kiranas.</p>
+          <p>© 2025 VyapaarAI. Built for India&apos;s MSMEs.</p>
           <p>Powered by Gemini · Groq · WhatsApp · FastAPI</p>
         </div>
       </div>

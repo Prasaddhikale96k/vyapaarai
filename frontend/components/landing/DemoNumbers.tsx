@@ -144,7 +144,7 @@ export default function DemoNumbers() {
           Real Numbers. Real Business.
         </h2>
         <p className="mx-auto mt-3 max-w-2xl text-lg" style={{ color: "rgba(253,250,244,0.75)" }}>
-          Sharma Kirana Traders used VyapaarAI for 30 days. Here&apos;s what happened.
+          Like Sharma Kirana Traders in our demo: 30 days on VyapaarAI. Here&apos;s what happened.
         </p>
         <div ref={gridRef} className="mt-10 grid grid-cols-2 gap-6 lg:grid-cols-3">
           <Stat icon={<RupeeIcon />} from={0} to={53400} format={(v) => `₹${formatIN(v)}`} label="Overdue Udhaari Detected" color="#E0604F" started={started} />

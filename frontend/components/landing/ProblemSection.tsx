@@ -95,7 +95,7 @@ export default function ProblemSection() {
             The Bahi-Khata <span style={{ color: "#C0392B" }}>Bleeds Money</span> — Silently.
           </h2>
           <p className="mt-4 max-w-xl text-lg leading-relaxed" style={{ color: "#4A3728" }}>
-            India&apos;s 1.3 crore kiranas run on paper, memory, and trust. Every day,
+            India&apos;s 7+ crore MSMEs run on paper, memory, and trust. Every day,
             udhaari goes untracked, stock runs out without warning, and the owner has
             no idea if the business is actually profitable. The pain isn&apos;t lack
             of effort — it&apos;s lack of a tool built for them.
