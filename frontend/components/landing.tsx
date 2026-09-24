@@ -1,7 +1,18 @@
 "use client";
 
+/**
+ * Landing product-mock components (P12.10).
+ * ANTI-BLANK: every export renders FULLY VISIBLE static markup on the
+ * server. Hiding/animation states apply only post-hydration via React state
+ * or mount-only GSAP (see ./reveal). No framer `initial`-hidden props on
+ * content anywhere in this file.
+ */
+
 import { animate, AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { DrawPath } from "@/components/reveal";
+
+export const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 /* Product mock strings: Hindi replies live ONLY inside phone/WhatsApp previews
    (language-sweep exception). All marketing copy outside mocks is English. */
@@ -51,27 +62,19 @@ export function PhoneMockup() {
       <div className="rounded-[1.8rem] px-3 pb-4 pt-8" style={{ background: "var(--paper)" }}>
         <div className="mx-auto mb-3 h-5 w-24 rounded-full" style={{ background: "#101613" }} />
         <div className="space-y-2 text-[12px] leading-snug">
-          <AnimatePresence>
-            {phase >= 0 && (
-              <motion.div
-                key="q"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md px-3 py-2 text-white"
-                style={{ background: "var(--accent)" }}
-              >
-                profit kyun gira?
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {phase >= 0 && (
+            <div
+              className="ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md px-3 py-2 text-white"
+              style={{ background: "var(--accent)" }}
+            >
+              profit kyun gira?
+            </div>
+          )}
           {phase >= 1 && (
             <div className="flex flex-wrap gap-1">
-              {AGENTS.map((a, i) => (
-                <motion.span
+              {AGENTS.map((a) => (
+                <span
                   key={a}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.06, duration: 0.3, ease: EASE }}
                   className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
                   style={{
                     borderColor: "var(--accent)",
@@ -80,27 +83,21 @@ export function PhoneMockup() {
                   }}
                 >
                   {a}
-                </motion.span>
+                </span>
               ))}
             </div>
           )}
           {phase >= 2 && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: EASE }}
+            <div
               className="rounded-2xl rounded-bl-md border px-3 py-2"
               style={{ background: "var(--card)", borderColor: "var(--card-border)", color: "var(--ink)" }}
             >
               {reduce ? ANSWER : ANSWER.slice(0, typed)}
               {phase === 2 && typed < ANSWER.length && <span className="animate-pulse">▍</span>}
-            </motion.div>
+            </div>
           )}
           {phase >= 3 && (
             <motion.a
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.25, ease: EASE }}
               whileTap={{ scale: 0.95 }}
               href={UPI}
               className="inline-block rounded-full px-3 py-1.5 text-[11px] font-bold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -110,10 +107,7 @@ export function PhoneMockup() {
             </motion.a>
           )}
           {phase >= 4 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.25, ease: EASE }}
+            <div
               className="flex items-center gap-1 rounded-2xl rounded-bl-md border px-3 py-2"
               style={{ background: "var(--card)", borderColor: "var(--card-border)" }}
             >
@@ -138,7 +132,7 @@ export function PhoneMockup() {
                   )
                 )}
               </svg>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>
@@ -146,10 +140,8 @@ export function PhoneMockup() {
   );
 }
 
-export const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
-
-/* Mini-demo: English questions, product-truth answers (Hindi allowed in answers as mock).
-   Signature moment: human typing with one backspace correction. */
+/* Mini-demo: English questions, product-truth answers.
+   SSR shows the full first answer; client enhances with word reveal + typing. */
 const DEMO_QA: [string, string][] = [
   ["Why did profit dip?", "Purchases up 12% and Rs.53,400 stuck in credit. Margin 15% to 11%. Collect dues first."],
   ["When does stock run out?", "Sugar 1kg lasts about 3 days at 17 per day. Reorder today."],
@@ -162,15 +154,18 @@ const TYPING_MISTAKE = "reorder 10kg sug";
 
 export function MiniDemo() {
   const [active, setActive] = useState(0);
-  const [words, setWords] = useState(0);
+  const [words, setWords] = useState<number | null>(null); // null = show full (SSR + reduced)
   const [typedQ, setTypedQ] = useState(TYPING_TARGET);
   const reduce = useReducedMotion();
   const full = DEMO_QA[active][1].split(" ");
 
-  /* Answer reveal: word-by-word with natural pauses at punctuation (gsap.timeline-like variable durations). */
+  /* Answer reveal: word-by-word with natural pauses at punctuation. */
   useEffect(() => {
-    setWords(reduce ? full.length : 0);
-    if (reduce) return;
+    if (reduce) {
+      setWords(null);
+      return;
+    }
+    setWords(0);
     let i = 0;
     let cancelled = false;
     let t: ReturnType<typeof setTimeout>;
@@ -205,7 +200,6 @@ export function MiniDemo() {
       }, ms);
       timers.push(t);
     };
-    // Type the mistake fast in bursts, pause, backspace, retype correctly.
     let at = 300;
     for (let c = 1; c <= TYPING_MISTAKE.length; c++) {
       const burst = c % 4 === 0 ? 260 : 55 + (c % 3) * 40;
@@ -220,8 +214,7 @@ export function MiniDemo() {
       schedule(() => setTypedQ(TYPING_MISTAKE.slice(0, n)), at);
     }
     at += 220;
-    const fix = ["a", "ar"];
-    fix.forEach((suf) => {
+    ["a", "ar"].forEach((suf) => {
       at += 140;
       schedule(() => setTypedQ(TYPING_MISTAKE.slice(0, TYPING_MISTAKE.length - 3) + suf), at);
     });
@@ -231,6 +224,8 @@ export function MiniDemo() {
     };
   }, [active, reduce]);
 
+  const shown = words === null ? full : full.slice(0, words);
+
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2">
@@ -239,7 +234,7 @@ export function MiniDemo() {
             key={q}
             whileTap={{ scale: 0.95 }}
             onClick={() => setActive(i)}
-            className="rounded-full border px-3 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="min-h-[44px] rounded-full border px-3 py-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
             style={
               active === i
                 ? { background: "var(--accent)", color: "#fff", borderColor: "var(--accent)", outlineColor: "var(--accent)" }
@@ -251,8 +246,8 @@ export function MiniDemo() {
         ))}
       </div>
       {/* Typing line with realistic caret + backspace correction */}
-      <div className="card mb-3 flex items-center gap-2">
-        <span className="text-xs font-bold" style={{ color: "var(--ink-faint)" }}>
+      <div className="card mb-3 flex items-center gap-2" style={{ background: "var(--accent-soft)" }}>
+        <span className="text-xs font-bold" style={{ color: "var(--accent)" }}>
           You
         </span>
         <p className="text-sm" style={{ color: "var(--ink)" }} aria-live="polite">
@@ -277,19 +272,13 @@ export function MiniDemo() {
           ))}
         </div>
         <p className="text-sm leading-relaxed" style={{ color: "var(--ink)" }}>
-          {full.slice(0, words).map((w, i) => (
-            <motion.span
-              key={`${active}-${i}`}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: EASE }}
-              className="inline-block"
-            >
+          {shown.map((w, i) => (
+            <span key={`${active}-${i}`} className="inline-block">
               {w}
-              {i < words - 1 ? " " : ""}
-            </motion.span>
+              {i < shown.length - 1 ? " " : ""}
+            </span>
           ))}
-          {words < full.length && <span className="animate-pulse">▍</span>}
+          {words !== null && words < full.length && <span className="animate-pulse">▍</span>}
         </p>
       </div>
     </div>
@@ -299,32 +288,25 @@ export function MiniDemo() {
 export function Doodle({ d, className = "" }: { d: string; className?: string }) {
   return (
     <svg viewBox="0 0 64 64" fill="none" className={className} width="44" height="44" aria-hidden="true">
-      <motion.path
-        d={d}
-        stroke="var(--marigold)"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        initial={{ pathLength: 0 }}
-        whileInView={{ pathLength: 1 }}
-        viewport={{ once: true, margin: "-60px" }}
-        transition={{ duration: 1, ease: EASE }}
-      />
+      <DrawPath d={d} stroke="var(--marigold)" width={2.5} duration={1} />
     </svg>
   );
 }
 
+/* SSR-correct count-up: server renders the true number; client recounts on entry. */
 export function CountUp({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-40px" });
   const reduce = useReducedMotion();
-  const [display, setDisplay] = useState(0);
+  const [display, setDisplay] = useState(value);
   useEffect(() => {
-    if (!inView) return;
-    if (reduce) {
-      setDisplay(value);
-      return;
-    }
-    const c = animate(0, value, { duration: 1.6, ease: [0.16, 1, 0.3, 1], onUpdate: (v) => setDisplay(Math.round(v)) });
+    if (!inView || reduce) return;
+    setDisplay(0);
+    const c = animate(0, value, {
+      duration: 1.6,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
     return () => c.stop();
   }, [inView, value, reduce]);
   return (
@@ -360,27 +342,23 @@ export function SpotCard({ children, className = "" }: { children: React.ReactNo
   );
 }
 
-/* Living ledger hero visual: khata page writes itself with HUMAN rhythm —
-   fast bursts + thinking pauses; ruled line draws just before its entry. */
+/* Living ledger: SSR shows all rows + answer statically. Client cycles them
+   with human rhythm; ruled lines draw (mount-only) just before each entry. */
 const LEDGER_ROWS = ["Ramesh — Rs.8,500 on credit", "Sugar 40kg — sold out", "Chai stock — reorder?"];
 const LEDGER_AI = "Profit -21.8%. Cause: purchases +12%, Rs.53,400 stuck in credit.";
 
-/* Variable choreography: line draws (300ms) -> burst types (1.2s) -> pause -> next. */
 const LEDGER_TIMING = [500, 2000, 3900];
 
 export function LivingLedger() {
   const reduce = useReducedMotion();
-  const [visible, setVisible] = useState(reduce ? 3 : 0);
-  const [showAi, setShowAi] = useState(reduce);
-  const [typed, setTyped] = useState(reduce ? LEDGER_AI.length : 0);
+  const [visible, setVisible] = useState(3);
+  const [showAi, setShowAi] = useState(true);
+  const [typed, setTyped] = useState(LEDGER_AI.length);
+  const [enhanced, setEnhanced] = useState(false);
 
   useEffect(() => {
-    if (reduce) {
-      setVisible(3);
-      setShowAi(true);
-      setTyped(LEDGER_AI.length);
-      return;
-    }
+    setEnhanced(true);
+    if (reduce) return;
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const loop = () => {
@@ -411,81 +389,73 @@ export function LivingLedger() {
     };
   }, [reduce]);
 
-  /* AI answer types in bursts once the card appears. */
   useEffect(() => {
-    if (!showAi || reduce) return;
+    if (!showAi || reduce || !enhanced) return;
     if (typed >= LEDGER_AI.length) return;
     const burst = typed % 5 === 0 ? 180 : 28;
     const t = setTimeout(() => setTyped((v) => Math.min(LEDGER_AI.length, v + 2)), burst);
     return () => clearTimeout(t);
-  }, [showAi, typed, reduce]);
+  }, [showAi, typed, reduce, enhanced]);
 
   return (
     <div className="ruled-paper relative mx-auto w-full max-w-[380px] rounded-2xl border p-5"
       style={{ background: "var(--card)", borderColor: "var(--card-border)", boxShadow: "var(--shadow)" }}>
+      <span className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold"
+        style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>
+        LIVE LEDGER
+      </span>
       <p className="font-display text-sm font-bold" style={{ color: "var(--ink-faint)" }}>Sharma Traders — day book</p>
       <svg viewBox="0 0 320 130" className="mt-2 w-full" fill="none" aria-hidden="true">
-        {[28, 58, 88, 118].map((y, i) => (
-          <motion.line
-            key={y}
-            x1="8"
-            y1={y}
-            x2="312"
-            y2={y}
-            stroke="var(--accent)"
-            strokeOpacity="0.25"
-            initial={{ pathLength: 0 }}
-            animate={visible > i || reduce ? { pathLength: 1 } : { pathLength: 0 }}
-            transition={{ duration: 0.3, ease: EASE }}
-          />
+        {[28, 58, 88, 118].map((y) => (
+          <DrawPath key={y} d={`M8 ${y} L312 ${y}`} stroke="var(--accent)" width={1} duration={0.3} />
         ))}
       </svg>
       <div className="-mt-28 space-y-4 px-2" aria-live="polite">
-        {LEDGER_ROWS.map((row, i) => (
-          <motion.p
-            key={row}
-            className="font-display text-[15px] italic"
-            style={{ color: "var(--ink)" }}
-            initial={reduce ? {} : { opacity: 0, x: -10 }}
-            animate={visible > i ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
-            transition={{ duration: 0.5, ease: EASE }}
-          >
-            {row}
-          </motion.p>
-        ))}
-      </div>
-      <AnimatePresence>
-        {showAi && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.7, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.4, ease: EASE }}
-            className="mt-3 rounded-2xl rounded-bl-md border p-3"
-            style={{ background: "var(--accent-soft)", borderColor: "var(--accent)" }}
-          >
-            <p className="text-xs font-bold" style={{ color: "var(--accent)" }}>VyapaarAI answer</p>
-            <p className="mt-1 text-[13px] leading-snug" style={{ color: "var(--ink)" }}>
-              {reduce ? LEDGER_AI : LEDGER_AI.slice(0, typed)}
+        {LEDGER_ROWS.map((row, i) => {
+          const on = !enhanced || visible > i;
+          return (
+            <p
+              key={row}
+              className="font-display text-[15px] italic transition-all duration-500"
+              style={{
+                color: "var(--ink)",
+                opacity: on ? 1 : 0,
+                transform: on ? "none" : "translateX(-10px)",
+                transitionTimingFunction: "cubic-bezier(0.16,1,0.3,1)",
+              }}
+            >
+              {row}
             </p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="tnum text-lg font-bold" style={{ color: "var(--ink)" }}>
-                <CountUp value={53400} prefix="Rs." />
-              </span>
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: "var(--accent)" }}>
-                Send UPI link
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          );
+        })}
+      </div>
+      {showAi && (
+        <div
+          className="mt-3 rounded-2xl rounded-bl-md border p-3"
+          style={{ background: "var(--accent-soft)", borderColor: "var(--accent)" }}
+        >
+          <p className="text-xs font-bold" style={{ color: "var(--accent)" }}>VyapaarAI answer</p>
+          <p className="mt-1 text-[13px] leading-snug" style={{ color: "var(--ink)" }}>
+            {LEDGER_AI.slice(0, typed)}
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="tnum text-lg font-bold" style={{ color: "var(--ink)" }}>
+              <CountUp value={53400} prefix="Rs." />
+            </span>
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ background: "var(--accent)" }}>
+              Send UPI link
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* Scrollytelling: 4 chapters, English marketing + product-truth numbers.
-   Hindi lives only inside the phone mock bubbles. Swaps use masked
-   clip-path transitions; phone tilts 3-4 deg per chapter. */
+   Panel 0 renders statically (AnimatePresence initial={false}); swaps use
+   masked clip-path transitions; phone tilts per chapter. Ghost numerals
+   behind each chapter give the background layer. */
 const CHAPTERS = [
   { t: "Morning brief, before chai", d: "Three alerts land at 8 AM. Rs.53,400 overdue caught while you slept.", mini: "brief" },
   { t: "Ask why profit dipped", d: "One question. Three specialists answer. Purchases up 12%, dues stuck.", mini: "chat" },
@@ -514,11 +484,14 @@ export function ScrollyTelling({ onChapter }: { onChapter?: (i: number) => void 
                 onChapter?.(i);
               }}
               viewport={{ margin: "-40% 0px -40% 0px" }}
-              className="py-8"
+              className="relative py-8"
               style={{ opacity: active === i ? 1 : 0.45 }}
             >
-              <p className="font-display text-xl font-bold" style={{ color: "var(--ink)" }}>{c.t}</p>
-              <p className="card-sub mt-1">{c.d}</p>
+              <span className="ghost-type -left-1 top-1 text-7xl" aria-hidden="true">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <p className="font-display relative text-xl font-bold" style={{ color: "var(--ink)" }}>{c.t}</p>
+              <p className="card-sub relative mt-1">{c.d}</p>
             </motion.div>
           ))}
         </div>
@@ -530,7 +503,7 @@ export function ScrollyTelling({ onChapter }: { onChapter?: (i: number) => void 
           transition={{ duration: 0.5, ease: EASE }}
           style={{ transformOrigin: "center" }}
         >
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={active}
               initial={reduce ? { opacity: 0 } : { clipPath: "inset(0 0 100% 0)", y: 14 }}

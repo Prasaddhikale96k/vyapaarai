@@ -48,42 +48,53 @@
   color-scheme: dark;
 }
 
-/* THE INK LINE layer: fixed full-viewport, behind text, never blocks clicks */
-.ink-line-layer {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
+/* THE INK LINE (safe version): inline per-section SVG segments placed at
+   section margins/edges or inside cards — never a layer above content. */
+.section-ink {
+  position: absolute;
   pointer-events: none;
-  z-index: 1;
-  opacity: 0.55;
-  transform: translateZ(0);
+  z-index: 0;
+  opacity: 0.6;
+  overflow: visible;
 }
-.ink-line-layer .ink-accent {
-  opacity: 0.8;
-}
-/* Desktop: full journey; mobile: slim margin path only */
-.ink-line-layer .ink-mobile {
-  display: none;
-}
+/* Mobile: hide complex flourish segments, keep simple margin strokes */
 @media (max-width: 768px) {
-  .ink-line-layer {
+  .section-ink {
     opacity: 0.4;
   }
-  .ink-line-layer .ink-segment:not(.ink-mobile):not(.ink-accent) {
-    display: none;
-  }
-  .ink-line-layer .ink-mobile {
-    display: block;
-  }
-  .ink-line-layer .ink-accent {
+  .section-ink.ink-complex {
     display: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ink-line-layer {
-    opacity: 0.5;
-  }
+
+/* DEAD-MAN'S SWITCH (E4): forced visible beats any stuck hidden state */
+.ink-shown {
+  opacity: 1 !important;
+  transform: none !important;
+  clip-path: none !important;
+}
+
+/* Density layers: oversized ghost type + faint grid backdrop */
+.ghost-type {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 700;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--card-border);
+  opacity: 0.9;
+  z-index: 0;
+  white-space: nowrap;
+}
+.grid-bg {
+  background-image:
+    linear-gradient(var(--card-border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--card-border) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 90% 90% at 50% 40%, black 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 90% at 50% 40%, black 30%, transparent 75%);
 }
 
 html {
