@@ -74,7 +74,7 @@ export default function Preloader({ onDone }: { onDone: () => void }) {
 
   if (gone) return null;
   return (
-    <div ref={root} className="landing-preloader" role="status" aria-label="Loading VyapaarAI">
+    <div ref={root} data-gsap="preloader" className="landing-preloader" role="status" aria-label="Loading VyapaarAI">
       <div
         ref={mark}
         className="font-devanagari"
