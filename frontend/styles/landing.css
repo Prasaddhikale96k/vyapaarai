@@ -99,16 +99,17 @@
   animation: landing-ping 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
-/* ---------- Transcript typewriter (IntersectionObserver adds .on) ---------- */
-.landing-transcript-line {
+/* ---------- Transcript typewriter (JS adds .js at mount; .on in view) ---------- */
+/* No-JS default: all lines visible (anti-blank). */
+.landing-transcript.js .landing-transcript-line {
   opacity: 0;
 }
-.landing-transcript.on .landing-transcript-line {
+.landing-transcript.js.on .landing-transcript-line {
   animation: landing-line-in 0.5s var(--ease-out-expo) forwards;
 }
-.landing-transcript.on .landing-transcript-line:nth-child(1) { animation-delay: 0.2s; }
-.landing-transcript.on .landing-transcript-line:nth-child(2) { animation-delay: 1.4s; }
-.landing-transcript.on .landing-transcript-line:nth-child(3) { animation-delay: 3.2s; }
+.landing-transcript.js.on .landing-transcript-line:nth-child(1) { animation-delay: 0.2s; }
+.landing-transcript.js.on .landing-transcript-line:nth-child(2) { animation-delay: 1.4s; }
+.landing-transcript.js.on .landing-transcript-line:nth-child(3) { animation-delay: 3.2s; }
 @keyframes landing-line-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -151,10 +152,10 @@
   .landing-bob {
     animation: none;
   }
-  .landing-transcript-line {
+  .landing-transcript.js .landing-transcript-line {
     opacity: 1;
   }
-  .landing-transcript.on .landing-transcript-line {
+  .landing-transcript.js.on .landing-transcript-line {
     animation: none;
     opacity: 1;
   }

@@ -6,6 +6,9 @@ import WhatsAppLoop from "@/components/landing/WhatsAppLoop";
 import HowItWorks from "@/components/landing/HowItWorks";
 import DemoNumbers from "@/components/landing/DemoNumbers";
 import FeaturesBento from "@/components/landing/FeaturesBento";
+import VoiceLanguageSection from "@/components/landing/VoiceLanguageSection";
+import FestivalSection from "@/components/landing/FestivalSection";
+import SoulSection from "@/components/landing/SoulSection";
 
 /**
  * VyapaarAI landing — saffron/ivory/navy edition.
@@ -14,9 +17,6 @@ import FeaturesBento from "@/components/landing/FeaturesBento";
  */
 
 const STUBS: { id: string; label: string }[] = [
-  { id: "voice", label: "Speak. It Listens. It Understands." },
-  { id: "festival", label: "Diwali Is Coming. Are Your Shelves Ready?" },
-  { id: "soul", label: "व्यापार" },
   { id: "hitl", label: "The AI Suggests. You Decide. Always." },
   { id: "testimonials", label: "From the Ledger to the Future." },
   { id: "cta", label: "Ready to Know Your Business?" },
@@ -33,6 +33,9 @@ export default function HomePage() {
         <HowItWorks />
         <DemoNumbers />
         <FeaturesBento />
+        <VoiceLanguageSection />
+        <FestivalSection />
+        <SoulSection />
         <footer className="mx-auto max-w-7xl px-4 py-16">
           <p className="text-sm" style={{ color: "#8B7355" }}>
             © 2025 VyapaarAI. Built for India&apos;s kiranas.
