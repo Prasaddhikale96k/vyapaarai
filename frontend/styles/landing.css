@@ -1,0 +1,161 @@
+/* VyapaarAI landing design tokens (saffron/ivory/navy system).
+   Scoped to :root per C4. Loaded AFTER globals.css from app/layout.tsx,
+   so landing font classes intentionally win over older dashboard ones. */
+
+:root {
+  --color-saffron: #e8771a;
+  --color-saffron-light: #fff3e0;
+  --color-saffron-dark: #b85a00;
+  --color-gold: #d4a017;
+  --color-gold-light: #fff8e1;
+  --color-ivory: #fdfaf4;
+  --color-ink: #1a1209;
+  --color-ink-muted: #4a3728;
+  --color-ink-subtle: #8b7355;
+  --color-navy: #0f2040;
+  --color-navy-muted: #162840;
+  --color-green-ledger: #2d6a4f;
+  --color-red-warning: #c0392b;
+  --color-whatsapp: #25d366;
+  --color-whatsapp-dark: #128c7e;
+  --color-surface: #ffffff;
+  --color-surface-warm: #fff9f0;
+  --color-border: #e8ddd0;
+  --color-border-strong: #c9b99a;
+
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Courier New", monospace;
+  --font-devanagari: "Tiro Devanagari Sanskrit", "Noto Serif Devanagari", "Tiro Devanagari Hindi", serif;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+  --radius-sm: 8px;
+
+  --shadow-card: 0 2px 20px rgba(26, 18, 9, 0.08), 0 0 0 1px rgba(232, 119, 26, 0.06);
+  --shadow-float: 0 8px 40px rgba(26, 18, 9, 0.12), 0 2px 8px rgba(26, 18, 9, 0.06);
+  --shadow-glow-saffron: 0 0 40px rgba(232, 119, 26, 0.25);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-custom: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 0.25s;
+  --duration-medium: 0.5s;
+  --duration-slow: 0.9s;
+  --duration-crawl: 1.4s;
+}
+
+/* Landing type utilities (defined here so they win over older globals). */
+.font-display {
+  font-family: "Playfair Display", Georgia, serif;
+}
+.font-devanagari {
+  font-family: "Tiro Devanagari Sanskrit", "Noto Serif Devanagari", "Tiro Devanagari Hindi", serif;
+}
+.tnum-landing {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Social proof marquee (pure CSS, no JS) ---------- */
+@keyframes landing-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.landing-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: landing-marquee 36s linear infinite;
+}
+.landing-marquee:hover .landing-marquee-track {
+  animation-play-state: paused;
+}
+
+/* ---------- Preloader ---------- */
+.landing-preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: #0f2040;
+}
+.landing-preloader-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: #e8771a;
+}
+
+/* ---------- Voice mic pulse rings (pure CSS) ---------- */
+@keyframes landing-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.landing-ping-ring {
+  animation: landing-ping 2.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* ---------- Transcript typewriter (IntersectionObserver adds .on) ---------- */
+.landing-transcript-line {
+  opacity: 0;
+}
+.landing-transcript.on .landing-transcript-line {
+  animation: landing-line-in 0.5s var(--ease-out-expo) forwards;
+}
+.landing-transcript.on .landing-transcript-line:nth-child(1) { animation-delay: 0.2s; }
+.landing-transcript.on .landing-transcript-line:nth-child(2) { animation-delay: 1.4s; }
+.landing-transcript.on .landing-transcript-line:nth-child(3) { animation-delay: 3.2s; }
+@keyframes landing-line-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Scroll hint bounce ---------- */
+@keyframes landing-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
+}
+.landing-bob {
+  animation: landing-bob 1.8s ease-in-out infinite;
+}
+
+/* ---------- Nav link underline ---------- */
+.landing-nav-link {
+  position: relative;
+}
+.landing-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  height: 2px;
+  width: 100%;
+  background: var(--color-saffron);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s var(--ease-out-expo);
+}
+.landing-nav-link:hover::after,
+.landing-nav-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* ---------- Reduced motion: kill landing CSS motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .landing-marquee-track,
+  .landing-ping-ring,
+  .landing-bob {
+    animation: none;
+  }
+  .landing-transcript-line {
+    opacity: 1;
+  }
+  .landing-transcript.on .landing-transcript-line {
+    animation: none;
+    opacity: 1;
+  }
+}
