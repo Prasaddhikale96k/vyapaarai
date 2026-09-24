@@ -304,3 +304,18 @@ ightly_report cron; dashboard report popover.
 - app/page.tsx (expert edition, emerald/Fraunces) copied to app/page.tsx.bak. Superseded `components/expert/` + LANDING_REPORT.md removed (untracked, replaced by this spec).
 - components/landing/ created. Lenis already wired globally in components/smooth.tsx with the EXACT canonical wiring (lenis.on scroll→ScrollTrigger.update, ticker ms conversion, lagSmoothing 0, reduced-motion gate) → LandingShell will NOT create a second Lenis instance (double-drive = jitter per skill).
 - Skills: R1 MagicUI SPARSE attempted, registry paths changed → MANUAL (hand-rolled count-up). R2 ReactBits CLONED+REMOVED. R3 Dub CLONED+REMOVED (reference only, no code copied). R4 GSAP skills ALREADY PRESENT (P12.9) + network re-verified. R5 web-animation-skills CLONED OK (gsap-web, scrolltrigger-lenis, svg/60fps/accessible/micro-interaction).
+
+## LANDING SAFFRON REBUILD (2026-09-24) — Phase 9 verification sweep
+
+- CHECK-1 tsc --noEmit → exit 0, 0 new errors. PASS.
+- CHECK-2 npm run build → green, `/` 20.7 kB / First Load 199 kB. PASS (1 fix used: Footer missing 'use client').
+- CHECK-3 routes (fresh dev server): `/ /login /register /app /app/chat /app/data /app/actions /admin` → 200; `/nonexistent-route` → 404. New-landing content confirmed in served HTML. PASS. (Note: a stale long-running dev server briefly 404'd `/` mid-rebuild; fresh boot serves 200 — wedged HMR state, not a code issue.)
+- CHECK-4 language audit (non-ASCII grep over components/landing): 0 violations — only (a) व्यापार brand mark, (b) WhatsApp-bubble/transcript product mocks, (c) mandated numerals ₹/→/×/·. PASS.
+- CHECK-5 verify_p3.py: SKIPPED — backend :8000 not reachable in this session; script exists but was not run (no live state touched).
+- CHECK-6 console errors: no browser in sandbox; dev-server log shows zero render/hydration errors across all route compiles. Browser console left for human pass.
+- CHECK-7 reduced motion: every GSAP path + Lenis gated behind prefers-reduced-motion; CSS motion killed under the media query; no-JS renders full content. PASS-by-construction (DevTools emulation = human pass).
+- CHECK-8 390px: stacked layouts, ≥44px targets, max-w phone mock, overflow-hidden heroes/marquee/footer. Verified by construction (no horizontal scroll sources); device check = human pass.
+- CHECK-9 1920px: max-w-7xl containment, hero clamp→6rem, vector-only SVGs. Verified by construction; projector check = human pass.
+- CHECK-10 backend untouched: diff since phase-0 contains ONLY app/page.tsx, app/layout.tsx (fonts link + landing.css import), components/landing/**, hooks/useCountUp.ts (landing-only, C5-sanctioned), styles/landing.css, tailwind.config.ts (+ phase-0: PROJECT_STATUS.md, page.tsx.bak, .opencode/skills). app/globals.css + tsconfig.tsbuildinfo reverted to HEAD. PASS.
+- Downgrades: (1) Second Lenis instance → NOT created (global Smooth provider already has verbatim canonical wiring; double-drive = jitter). (2) MagicUI NumberTicker → hand-rolled useCountUp. Lenis itself NOT disabled (works via provider).
+- Side effects to know: `.font-display` now resolves Playfair (was Fraunces) wherever the class is used, including /app dashboard — serif-to-serif, low risk. Google Fonts <link> needs internet at view time; Georgia/system-ui fallbacks otherwise.
