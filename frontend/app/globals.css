@@ -132,6 +132,15 @@ body {
   font-family: var(--font-devanagari), "Tiro Devanagari Hindi", serif;
 }
 
+/* Proof tint band, theme-aware */
+:root,
+:root[data-theme="light"] {
+  --tint: #f0fdf4;
+}
+:root[data-theme="dark"] {
+  --tint: #0f2018;
+}
+
 /* S8 emerald band, theme-aware */
 :root,
 :root[data-theme="light"] {
