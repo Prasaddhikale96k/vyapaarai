@@ -65,7 +65,7 @@ export default function Beat6CTA() {
           </Link>
         </motion.div>
         <motion.p className="mt-8 text-sm" style={{ color: "var(--ink-faint)" }} data-reveal {...rise(0.6)}>
-          1,000+ Indian MSMEs already growing with us
+          1,000+ Indian MSMEs growing with us
         </motion.p>
       </div>
     </SectionWrapper>

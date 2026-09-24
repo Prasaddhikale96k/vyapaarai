@@ -13,7 +13,14 @@ export default function Beat1Hero() {
   const reduce = useReducedMotion() ?? false;
   return (
     <section className="relative flex min-h-screen items-center overflow-hidden px-6 py-20" style={{ background: "var(--paper)" }}>
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 md:grid-cols-5">
+      <div
+        className="font-devanagari pointer-events-none absolute inset-0 flex items-center justify-center font-bold select-none"
+        style={{ fontSize: "20rem", opacity: 0.05, color: "var(--accent)" }}
+        aria-hidden="true"
+      >
+        व्यापार
+      </div>
+      <div className="relative mx-auto grid w-full max-w-7xl items-center gap-12 md:grid-cols-5">
         <motion.div
           className="md:col-span-2"
           data-reveal

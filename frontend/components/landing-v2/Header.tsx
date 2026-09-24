@@ -23,9 +23,9 @@ export default function Header() {
         </span>
       </Link>
       <nav className="ml-auto hidden items-center gap-5 text-sm md:flex" style={{ color: "var(--ink-soft)" }}>
-        <a href="#how" className="rounded px-1 py-2 hover:opacity-70 active:opacity-50">
-          How it works
-        </a>
+          <a href="#how" className="rounded px-1 py-2 hover:opacity-70 active:opacity-50">
+            How
+          </a>
         <a href="#demo" className="rounded px-1 py-2 hover:opacity-70 active:opacity-50">
           Demo
         </a>

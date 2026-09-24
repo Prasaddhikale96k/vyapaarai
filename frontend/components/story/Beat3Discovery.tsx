@@ -31,7 +31,7 @@ export default function Beat3Discovery() {
             A message: “Try VyapaarAI. Free for 30 days.”
           </motion.h2>
           <motion.p className="max-w-prose text-lg" style={{ color: "var(--ink-soft)" }} data-reveal {...rise(1.0)}>
-            Ramesh clicks. Connects his WhatsApp. The story changes.
+            Ramesh taps. WhatsApp connects. The story changes.
           </motion.p>
         </div>
         <motion.div

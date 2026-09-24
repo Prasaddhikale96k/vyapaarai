@@ -12,7 +12,7 @@ const EASE: [number, number, number, number] = [0.19, 1, 0.22, 1];
 const CARDS = [
   { t: "Rs.53,400 forgotten in udhaari", from: { x: -40, y: 0 } },
   { t: "18 products out of stock", from: { x: 40, y: 0 } },
-  { t: "3 hours daily on ledger maths", from: { x: 0, y: 40 } },
+  { t: "3 hours on ledger maths", from: { x: 0, y: 40 } },
 ];
 
 export default function Beat2Problem() {
