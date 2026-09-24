@@ -2,6 +2,8 @@ import LandingShell from "@/components/landing/LandingShell";
 import Hero from "@/components/landing/Hero";
 import SocialProofBar from "@/components/landing/SocialProofBar";
 import ProblemSection from "@/components/landing/ProblemSection";
+import WhatsAppLoop from "@/components/landing/WhatsAppLoop";
+import HowItWorks from "@/components/landing/HowItWorks";
 
 /**
  * VyapaarAI landing — saffron/ivory/navy edition.
@@ -10,8 +12,6 @@ import ProblemSection from "@/components/landing/ProblemSection";
  */
 
 const STUBS: { id: string; label: string }[] = [
-  { id: "whatsapp-loop", label: "One WhatsApp. Your Entire Business." },
-  { id: "how-it-works", label: "From Bahi-Khata to Business Intelligence" },
   { id: "demo", label: "Real Numbers. Real Business." },
   { id: "features", label: "Everything a Kirana Needs. Nothing It Doesn't." },
   { id: "voice", label: "Speak. It Listens. It Understands." },
@@ -29,6 +29,8 @@ export default function HomePage() {
         <Hero />
         <SocialProofBar />
         <ProblemSection />
+        <WhatsAppLoop />
+        <HowItWorks />
         <footer className="mx-auto max-w-7xl px-4 py-16">
           <p className="text-sm" style={{ color: "#8B7355" }}>
             © 2025 VyapaarAI. Built for India&apos;s kiranas.
