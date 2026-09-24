@@ -1,54 +1,42 @@
-"use client";
+import LandingShell from "@/components/landing/LandingShell";
 
 /**
- * VyapaarAI storytelling landing — Ramesh's journey in 6 beats.
- * Lottie-first (doodle fallbacks: 0 JSONs downloadable headless),
- * framer-motion reveals, watchdog against blank states.
+ * VyapaarAI landing — saffron/ivory/navy edition.
+ * Sections land phase by phase; stubs below are VISIBLE placeholders
+ * (anti-blank: real text, real ids) replaced with real components.
  */
 
-import { useEffect } from "react";
-import Header from "@/components/landing-v2/Header";
-import Footer from "@/components/landing-v2/Footer";
-import Beat1Hero from "@/components/story/Beat1Hero";
-import Beat2Problem from "@/components/story/Beat2Problem";
-import Beat3Discovery from "@/components/story/Beat3Discovery";
-import Beat4Magic from "@/components/story/Beat4Magic";
-import Beat5Transformation from "@/components/story/Beat5Transformation";
-import Beat6CTA from "@/components/story/Beat6CTA";
-import ScrollProgress from "@/components/story/ScrollProgress";
+const STUBS: { id: string; label: string }[] = [
+  { id: "hero", label: "Hero — Your Kirana's AI Brain on WhatsApp." },
+  { id: "proof-bar", label: "Social proof bar" },
+  { id: "problem", label: "The Bahi-Khata Bleeds Money — Silently." },
+  { id: "whatsapp-loop", label: "One WhatsApp. Your Entire Business." },
+  { id: "how-it-works", label: "From Bahi-Khata to Business Intelligence" },
+  { id: "demo", label: "Real Numbers. Real Business." },
+  { id: "features", label: "Everything a Kirana Needs. Nothing It Doesn't." },
+  { id: "voice", label: "Speak. It Listens. It Understands." },
+  { id: "festival", label: "Diwali Is Coming. Are Your Shelves Ready?" },
+  { id: "soul", label: "व्यापार" },
+  { id: "hitl", label: "The AI Suggests. You Decide. Always." },
+  { id: "testimonials", label: "From the Ledger to the Future." },
+  { id: "cta", label: "Ready to Know Your Business?" },
+];
 
-function Watchdog() {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      document.querySelectorAll("[data-reveal]").forEach((el) => {
-        const opacity = window.getComputedStyle(el).opacity;
-        if (parseFloat(opacity) < 0.1) {
-          console.warn("WATCHDOG: force-showing", el);
-          (el as HTMLElement).style.opacity = "1";
-          (el as HTMLElement).style.transform = "none";
-        }
-      });
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, []);
-  return null;
-}
-
-export default function LandingPage() {
+export default function HomePage() {
   return (
-    <div className="min-h-screen" style={{ background: "var(--paper)", color: "var(--ink)" }}>
-      <Watchdog />
-      <ScrollProgress />
-      <Header />
-      <main>
-        <Beat1Hero />
-        <Beat2Problem />
-        <Beat3Discovery />
-        <Beat4Magic />
-        <Beat5Transformation />
-        <Beat6CTA />
+    <LandingShell>
+      <main style={{ background: "#FDFAF4", color: "#1A1209" }}>
+        {STUBS.map((s) => (
+          <section key={s.id} id={s.id} className="mx-auto max-w-7xl px-4 py-24">
+            <h2 className="font-display text-3xl font-bold">{s.label}</h2>
+          </section>
+        ))}
+        <footer className="mx-auto max-w-7xl px-4 py-16">
+          <p className="text-sm" style={{ color: "#8B7355" }}>
+            © 2025 VyapaarAI. Built for India&apos;s kiranas.
+          </p>
+        </footer>
       </main>
-      <Footer />
-    </div>
+    </LandingShell>
   );
 }
