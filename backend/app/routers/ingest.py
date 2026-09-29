@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -158,6 +159,81 @@ def list_files(db: Session = Depends(get_db), owner=Depends(get_optional_owner))
         return [serialize_processed(r) for r in rows]
     except Exception:
         return []
+
+
+class GridRow(BaseModel):
+    date: str = ""
+    product: str = ""
+    qty: Optional[str] = ""
+    unit_price: Optional[str] = ""
+    customer: str = ""
+    type: str = "sale"
+
+
+class GridIn(BaseModel):
+    rows: list[GridRow] = []
+
+
+@router.post("/grid")
+@limiter.limit("20/minute")
+def ingest_grid(request: Request, body: GridIn, db: Session = Depends(get_db),
+                owner=Depends(get_optional_owner)):
+    """Direct Entry grid save: JSON rows -> EXISTING ingest_dataframe (no parse dup).
+
+    Mapping: sale -> sales ingestor; purchase -> expenses (category=Purchases,
+    note=product); expense -> expenses (category=product/Misc, note=customer).
+    amount = (qty||1) x unit_price. filename='web-grid' marks the log.
+    """
+    import pandas as pd
+
+    from app.services.ingestion import ingest_dataframe, parse_amount
+
+    oid = owner_id_of(owner)
+    sales_rows: list = []
+    exp_rows: list = []
+    for r in (body.rows or []):
+        t = str(getattr(r, "type", "") or "sale").strip().lower()
+        if t not in ("sale", "purchase", "expense"):
+            t = "sale"
+        d = str(getattr(r, "date", "") or "").strip()
+        prod = str(getattr(r, "product", "") or "").strip()
+        qty = parse_amount(getattr(r, "qty", "") or "")
+        price = parse_amount(getattr(r, "unit_price", "") or "")
+        cust = str(getattr(r, "customer", "") or "").strip()
+        if not d or not prod or qty is None and t in ("sale", "purchase"):
+            continue
+        if price is None:
+            continue
+        if t == "sale":
+            sales_rows.append({"date": d, "product": prod, "qty": qty,
+                               "unit_price": price, "customer": cust})
+        elif t == "purchase":
+            exp_rows.append({"date": d, "category": "Purchases",
+                             "amount": float(qty or 0) * float(price), "note": prod})
+        else:
+            exp_rows.append({"date": d, "category": prod or "Misc",
+                             "amount": float(qty if qty is not None else 1) * float(price),
+                             "note": cust or None})
+    total_in = total_skip = 0
+    warnings: list = []
+    if sales_rows:
+        s = ingest_dataframe(db, pd.DataFrame(sales_rows), "sales", "web-grid", owner_id=oid)
+        total_in += int(s.get("rows_inserted", 0) or 0)
+        total_skip += int(s.get("rows_skipped", 0) or 0)
+        warnings += list(s.get("warnings", []) or [])
+    if exp_rows:
+        s = ingest_dataframe(db, pd.DataFrame(exp_rows), "expenses", "web-grid", owner_id=oid)
+        total_in += int(s.get("rows_inserted", 0) or 0)
+        total_skip += int(s.get("rows_skipped", 0) or 0)
+        warnings += list(s.get("warnings", []) or [])
+    if not sales_rows and not exp_rows:
+        return {"source_type": "web-grid", "filename": "web-grid",
+                "rows_inserted": 0, "rows_skipped": len(body.rows or []),
+                "warnings": ["Koi valid row nahi — date/product/qty/price check karo"]}
+    invalidate_intel()
+    return {"source_type": "web-grid", "filename": "web-grid",
+            "rows_inserted": total_in, "rows_skipped": total_skip,
+            "warnings": warnings[:20]}
 
 
 @router.get("/template")

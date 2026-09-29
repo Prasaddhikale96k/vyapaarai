@@ -723,6 +723,338 @@ python connectors\\tally_sync.py`}
   );
 }
 
+/* ---------- direct entry grid ---------- */
+
+type GridType = "sale" | "purchase" | "expense";
+
+interface GridRowState {
+  key: number;
+  date: string;
+  product: string;
+  qty: string;
+  price: string;
+  customer: string;
+  type: GridType;
+  fromScan?: boolean;
+}
+
+type CellErrors = Record<number, Partial<Record<"date" | "product" | "qty" | "price", string>>>;
+
+const GRID_TYPES: GridType[] = ["sale", "purchase", "expense"];
+
+function todayISO(): string {
+  try {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  } catch {
+    return "";
+  }
+}
+
+let gridKey = 1;
+function blankRow(): GridRowState {
+  return { key: gridKey++, date: todayISO(), product: "", qty: "", price: "", customer: "", type: "sale" };
+}
+
+function validateGridRow(r: GridRowState): Partial<Record<"date" | "product" | "qty" | "price", string>> {
+  const e: Partial<Record<"date" | "product" | "qty" | "price", string>> = {};
+  if (!r.date.trim() || Number.isNaN(Date.parse(r.date.trim()))) e.date = "Sahi date daalo (YYYY-MM-DD)";
+  if (!r.product.trim()) e.product = "Product chuno ya naya likho";
+  const price = Number(String(r.price).replace(/,/g, "").trim());
+  if (!r.price.trim() || Number.isNaN(price) || price <= 0) e.price = "Sahi price daalo (> 0)";
+  if (r.type !== "expense") {
+    const qty = Number(String(r.qty).replace(/,/g, "").trim());
+    if (!r.qty.trim() || Number.isNaN(qty) || qty <= 0) e.qty = "Sahi qty daalo (> 0)";
+  } else if (r.qty.trim()) {
+    const qty = Number(String(r.qty).replace(/,/g, "").trim());
+    if (Number.isNaN(qty) || qty <= 0) e.qty = "Sahi qty daalo (> 0)";
+  }
+  return e;
+}
+
+const GRID_COLS: { letter: string; label: string; hint: string }[] = [
+  { letter: "A", label: "Date", hint: "YYYY-MM-DD" },
+  { letter: "B", label: "Product", hint: "sale: item • purchase: stock • expense: head" },
+  { letter: "C", label: "Qty", hint: "sale/purchase me zaroori" },
+  { letter: "D", label: "Unit Price", hint: "₹ me" },
+  { letter: "E", label: "Customer", hint: "sale: grahak • expense: note" },
+  { letter: "F", label: "Type", hint: "sale / purchase / expense" },
+];
+
+function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSaved: () => void }) {
+  const [rows, setRows] = useState<GridRowState[]>(() => [blankRow(), blankRow(), blankRow()]);
+  const [errors, setErrors] = useState<CellErrors>({});
+  const [summary, setSummary] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [customProducts, setCustomProducts] = useState<{ name: string; price: string }[]>([]);
+  const [showMini, setShowMini] = useState<number | null>(null);
+  const [miniName, setMiniName] = useState("");
+  const [miniPrice, setMiniPrice] = useState("");
+
+  const productNames = [
+    ...(products ?? []).map((p) => p.name).filter(Boolean),
+    ...customProducts.map((c) => c.name),
+  ];
+
+  const setCell = (key: number, field: keyof GridRowState, value: string) => {
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, [field]: value } : r)));
+    setErrors((es) => {
+      if (!es[key]) return es;
+      const next = { ...es };
+      const rowErr = { ...next[key] } as Record<string, string>;
+      delete rowErr[field as string];
+      if (Object.keys(rowErr).length === 0) delete next[key];
+      else next[key] = rowErr;
+      return next;
+    });
+  };
+
+  const addRow = () => setRows((rs) => [...rs, blankRow()]);
+  const delRow = (key: number) => {
+    setRows((rs) => (rs.length <= 1 ? rs : rs.filter((r) => r.key !== key)));
+  };
+
+  const confirmMini = (key: number) => {
+    const name = miniName.trim();
+    const price = miniPrice.trim();
+    if (!name) {
+      toast.error("Naye product ka naam likho");
+      return;
+    }
+    if (!price || Number.isNaN(Number(price.replace(/,/g, ""))) || Number(price.replace(/,/g, "")) <= 0) {
+      toast.error("Naye product ka sahi price likho");
+      return;
+    }
+    setCustomProducts((cs) => (cs.some((c) => c.name === name) ? cs : [...cs, { name, price }]));
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, product: name, price } : r)));
+    setShowMini(null);
+    setMiniName("");
+    setMiniPrice("");
+  };
+
+  const save = async () => {
+    const errs: CellErrors = {};
+    rows.forEach((r) => {
+      const e = validateGridRow(r);
+      if (Object.keys(e).length > 0) errs[r.key] = e;
+    });
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      const n = Object.keys(errs).length;
+      setSummary(`${n} row me error hai — laal cells theek karo, phir Save dabao`);
+      toast.error("Grid me error hai — neeche dekho");
+      return;
+    }
+    setSummary("");
+    setSaving(true);
+    try {
+      const r = await apiFetch<IngestSummary>("/ingest/grid", {
+        method: "POST",
+        body: JSON.stringify({
+          rows: rows.map(({ date, product, qty, price, customer, type }) => ({
+            date, product, qty, unit_price: price, customer, type,
+          })),
+        }),
+      });
+      if (r.rows_inserted > 0) {
+        toast.success(`${r.rows_inserted} rows saved ✅`);
+        setRows([blankRow(), blankRow(), blankRow()]);
+        onSaved();
+      } else {
+        toast.warning("Koi row save nahi hui — sab skipped");
+      }
+      if (r.warnings?.length) setSummary(`Warnings: ${r.warnings[0].slice(0, 140)}`);
+      else setSummary("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Save fail ho gaya");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cellCls = (hasErr: boolean) =>
+    `w-full bg-transparent px-2 py-1.5 text-xs outline-none placeholder:opacity-40 tabular-nums ${
+      hasErr ? "border border-rose-500 rounded" : "border border-transparent"
+    }`;
+
+  return (
+    <Card delay={0.06} hover>
+      <h3 className="card-title">📝 Direct Entry — seedha likho, sync ho jayega</h3>
+      <p className="card-sub mb-3">
+        Excel jaisa grid — sale / purchase (stock khareed) / expense (kharcha). Purchase → khareed ledger me, expense ka head B column me likho.
+      </p>
+      {/* horizontal scroll SIRF card ke andar — page scroll nahi hoga */}
+      <div className="overflow-x-auto rounded-xl border border-zinc-800">
+        <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <thead>
+            <tr className="bg-zinc-900/70 text-zinc-500">
+              <th className="w-10 border border-zinc-800 px-2 py-1.5 text-center font-mono">#</th>
+              {GRID_COLS.map((c) => (
+                <th key={c.letter} className="border border-zinc-800 px-2 py-1.5" title={c.hint}>
+                  <span className="mr-1.5 font-mono font-bold text-zinc-400">{c.letter}</span>
+                  {c.label}
+                </th>
+              ))}
+              <th className="w-12 border border-zinc-800 px-2 py-1.5 text-center">✕</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const re = errors[r.key] ?? {};
+              const isNewChoice = r.product === "__new__";
+              return (
+                <tr key={r.key} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
+                  <td className="border border-zinc-800 px-2 py-1.5 text-center font-mono text-zinc-500">{i + 1}</td>
+                  <td className="border border-zinc-800">
+                    <input
+                      className={`${cellCls(!!re.date)} font-mono`}
+                      value={r.date}
+                      placeholder="YYYY-MM-DD"
+                      inputMode="numeric"
+                      onChange={(e) => setCell(r.key, "date", e.target.value)}
+                      aria-label={`Row ${i + 1} date`}
+                    />
+                  </td>
+                  <td className="border border-zinc-800">
+                    <select
+                      className={`${cellCls(!!re.product)} ${isNewChoice ? "opacity-60" : ""}`}
+                      value={productNames.includes(r.product) ? r.product : r.product ? "__typed__" : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "__new__") {
+                          setShowMini(r.key);
+                          setMiniName("");
+                          setMiniPrice(r.price);
+                        } else if (v === "__typed__") {
+                          /* free text already in input below */
+                        } else {
+                          setCell(r.key, "product", v);
+                          const found = (products ?? []).find((p) => p.name === v);
+                          if (found && !r.price) setCell(r.key, "price", String(found.sale_price));
+                        }
+                      }}
+                      aria-label={`Row ${i + 1} product select`}
+                    >
+                      <option value="">— product —</option>
+                      {productNames.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                      {r.product && !productNames.includes(r.product) && (
+                        <option value="__typed__">{r.product} (likha hua)</option>
+                      )}
+                      <option value="__new__">➕ new product…</option>
+                    </select>
+                    <input
+                      className={`${cellCls(!!re.product)} mt-0.5 border-t border-zinc-800/60`}
+                      value={isNewChoice ? "" : r.product}
+                      placeholder="ya naam likho"
+                      onChange={(e) => setCell(r.key, "product", e.target.value)}
+                      aria-label={`Row ${i + 1} product name`}
+                    />
+                  </td>
+                  <td className="border border-zinc-800">
+                    <input
+                      className={`${cellCls(!!re.qty)} font-mono`}
+                      value={r.qty}
+                      placeholder={r.type === "expense" ? "(optional)" : "0"}
+                      inputMode="decimal"
+                      onChange={(e) => setCell(r.key, "qty", e.target.value)}
+                      aria-label={`Row ${i + 1} qty`}
+                    />
+                  </td>
+                  <td className="border border-zinc-800">
+                    <input
+                      className={`${cellCls(!!re.price)} font-mono`}
+                      value={r.price}
+                      placeholder="₹"
+                      inputMode="decimal"
+                      onChange={(e) => setCell(r.key, "price", e.target.value)}
+                      aria-label={`Row ${i + 1} unit price`}
+                    />
+                  </td>
+                  <td className="border border-zinc-800">
+                    <input
+                      className={cellCls(false)}
+                      value={r.customer}
+                      placeholder="grahak / note"
+                      onChange={(e) => setCell(r.key, "customer", e.target.value)}
+                      aria-label={`Row ${i + 1} customer`}
+                    />
+                  </td>
+                  <td className="border border-zinc-800">
+                    <select
+                      className={cellCls(false)}
+                      value={r.type}
+                      onChange={(e) => setCell(r.key, "type", e.target.value)}
+                      aria-label={`Row ${i + 1} type`}
+                    >
+                      {GRID_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="border border-zinc-800 text-center">
+                    <button
+                      type="button"
+                      onClick={() => delRow(r.key)}
+                      aria-label={`Delete row ${i + 1}`}
+                      className="rounded px-1.5 py-1 text-sm text-zinc-500 hover:text-rose-400"
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {showMini !== null && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-zinc-700 p-2 text-xs">
+          <span className="font-semibold">➕ Naya product:</span>
+          <input
+            className="rounded-lg border border-zinc-700 bg-transparent px-2 py-1.5 outline-none placeholder:opacity-40"
+            placeholder="Naam"
+            value={miniName}
+            onChange={(e) => setMiniName(e.target.value)}
+            aria-label="New product name"
+          />
+          <input
+            className="w-28 rounded-lg border border-zinc-700 bg-transparent px-2 py-1.5 font-mono outline-none placeholder:opacity-40"
+            placeholder="Price ₹"
+            inputMode="decimal"
+            value={miniPrice}
+            onChange={(e) => setMiniPrice(e.target.value)}
+            aria-label="New product price"
+          />
+          <Button className="px-3 py-1.5 text-xs" onClick={() => confirmMini(showMini)}>
+            Add
+          </Button>
+          <Button variant="ghost" className="px-3 py-1.5 text-xs" onClick={() => setShowMini(null)}>
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {summary && <p className="mt-2 text-xs font-semibold text-amber-300">{summary}</p>}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="outline" onClick={addRow}>
+          + Add Row
+        </Button>
+        <Button onClick={save} disabled={saving}>
+          {saving ? "Saving…" : `Save ${rows.length} rows ✅`}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 /* ---------- main page ---------- */
 
 export default function DataPage() {
@@ -832,6 +1164,15 @@ export default function DataPage() {
           </DropLabel>
         </Card>
       </div>
+
+      <DirectEntryCard
+        products={products.data ?? []}
+        onSaved={() => {
+          logs.refetch();
+          products.refetch();
+          files.refetch();
+        }}
+      />
 
       <ConnectorsCard meId={me.data?.id} />
 
