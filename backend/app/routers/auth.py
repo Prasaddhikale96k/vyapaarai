@@ -192,7 +192,6 @@ def owner_id_of(prof, default: int = 1) -> int:
 @router.post("/auth/otp/request")
 @limiter.limit("5/minute")
 def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)):
-    from app.models import OwnerProfile
 
     phone = _digits(req.phone)
     if len(phone) < 10:
@@ -234,7 +233,6 @@ def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)
 
 @router.post("/auth/otp/verify")
 def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
-    from app.models import OwnerProfile
 
     phone = _digits(req.phone)
     prof = _find_profile_by_phone(db, req.phone)
@@ -306,7 +304,6 @@ def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
 
 from app.services.phone import (  # single util (S8#25)
     find_profile_by_phone as _find_profile_by_phone,
-    phone_candidates as _phone_candidates,
 )
 
 

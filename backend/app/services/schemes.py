@@ -312,7 +312,6 @@ def build_reply(ev: dict, lang: str = "hi") -> str:
         pname = str(parsed.get("product", "") or "Scheme")
         buy = parsed.get("buy_qty", "?")
         free = parsed.get("free_qty", "?")
-        eff = ev.get("effective")
         sv = ev.get("savings_pct")
         sd = ev.get("stock_days")
         valid = parsed.get("valid_till")

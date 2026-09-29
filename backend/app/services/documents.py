@@ -265,7 +265,7 @@ def confirm_document(db, doc_id: int, approve: bool, phone=None, owner_id: int =
         ensure_p4_schema()
     except Exception:
         pass
-    from app.models import Customer, Expense, Product, Receivable, Sale
+    from app.models import Customer, Expense, Receivable, Sale
 
     oid = _oid(owner_id)
     try:

@@ -135,7 +135,6 @@ def _fetch_sheet_values(sheet_id: str, range_name: str) -> list:
 def poll_google_sheets(connector, db) -> dict:
     """Poll one Google Sheets connector. Row diff via sha256 -> new rows -> sales ingestion."""
     try:
-        from app.models import Connector
 
         cfg = {}
         raw = getattr(connector, "config", None)

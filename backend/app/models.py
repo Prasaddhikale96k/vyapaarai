@@ -1,6 +1,4 @@
 import json
-from datetime import date, datetime
-from typing import Optional
 from sqlalchemy import (
     Column,
     Integer,
@@ -10,7 +8,6 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     UniqueConstraint,
-    Index,
     Boolean,
     DateTime,
     func,

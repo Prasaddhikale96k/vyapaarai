@@ -268,7 +268,7 @@ def morning_brief_placeholder() -> None:
     """08:00 job: brief to every allowed owner + one-time nudge if activated but
     never onboarded (account older than 20h, nudge not yet sent). Never raises."""
     try:
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
         from app.db import SessionLocal, ensure_p15_schema
         from app.models import OwnerProfile

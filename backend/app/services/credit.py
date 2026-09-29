@@ -3,7 +3,6 @@
 import logging
 import math
 from datetime import date, timedelta
-from typing import Dict, List
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session

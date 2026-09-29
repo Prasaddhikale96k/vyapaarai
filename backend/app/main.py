@@ -2,7 +2,6 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
 
 import structlog
 from fastapi import FastAPI, Request

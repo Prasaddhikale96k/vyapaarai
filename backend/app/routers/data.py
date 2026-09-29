@@ -3,11 +3,10 @@ import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Customer, Expense, InventoryItem, Product, Receivable, Sale
+from app.models import InventoryItem, Product
 from app.routers.auth import get_optional_owner, owner_id_of, require_admin
 from app.schemas import ProductWithInventory, ResetResponse
 

@@ -416,7 +416,7 @@ def _handle_text(db, profile, incoming: dict, owner_id: int = 1) -> None:
             try:
                 res = documents.confirm_document(db, pending.id, True, phone=phone, owner_id=oid)
                 _reply(phone, str(res.get("message") or res.get("error") or "Ho gaya ✅"))
-            except Exception as exc:
+            except Exception:
                 _reply(phone, "Kuch gadbad ho gayi, thodi der mein dobara try karein 🙏")
                 logger.info("confirm HAAN failed: %s", traceback.format_exc()[:500])
             return

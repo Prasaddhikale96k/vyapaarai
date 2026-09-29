@@ -2,7 +2,6 @@
 
 import json
 import logging
-import math
 import os
 import re
 import threading
@@ -144,7 +143,7 @@ def tool_get_metric(name: str, owner_id=None) -> str:
     try:
         from app.db import SessionLocal
         from app.services import intelligence as eng
-        from app.models import InventoryItem, Product, Receivable, Sale
+        from app.models import InventoryItem, Receivable, Sale
 
         oid = _oid(owner_id)
         key = str(name or "").strip()
