@@ -239,3 +239,16 @@ class ProcessedFile(Base):
     warnings = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class Connector(Base):
+    __tablename__ = "connectors"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = _owner_col()
+    type = Column(String(24), nullable=False)  # google_sheets | excel_agent | tally_agent
+    config = Column(Text, nullable=True)  # JSON string
+    status = Column(String(16), default="offline", nullable=False)  # live | polling | offline | error
+    last_sync_at = Column(DateTime, nullable=True)
+    rows_synced = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     business_name: str = "Sharma Kirana Traders"
     gemini_api_key: str = ""
     groq_api_key: str = ""
+    google_api_key: str = ""
     llm_primary_provider: str = "groq"
     llm_fallback_provider: str = "gemini"
     demo_mode_fallback: bool = True
@@ -49,6 +50,7 @@ settings = Settings()
 # even if Settings was imported before env was set.
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", settings.groq_api_key or "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", settings.gemini_api_key or "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", settings.google_api_key or "")
 LLM_PRIMARY_PROVIDER = os.getenv("LLM_PRIMARY_PROVIDER", settings.llm_primary_provider or "groq").lower()
 LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", settings.llm_fallback_provider or "gemini").lower()
 _demo_raw = os.getenv("DEMO_MODE_FALLBACK", None)

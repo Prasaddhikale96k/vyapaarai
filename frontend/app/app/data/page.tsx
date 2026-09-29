@@ -531,6 +531,198 @@ function DocumentsCard() {
   );
 }
 
+/* ---------- live connectors card ---------- */
+
+interface Connector {
+  id: number;
+  type: string;
+  config: Record<string, unknown>;
+  status: string;
+  last_sync_at: string | null;
+  rows_synced: number;
+}
+
+const STATUS_TONE: Record<string, string> = {
+  live: "var(--accent)",
+  polling: "var(--marigold)",
+  offline: "var(--ink-faint)",
+  error: "var(--rose, #f43f5e)",
+};
+
+function ConnectorsCard({ meId }: { meId: number | undefined }) {
+  const connectors = useApi<Connector[]>("/connectors", 300000);
+  const [tab, setTab] = useState<"google_sheets" | "excel_agent" | "tally_agent">("google_sheets");
+  const [sheetLink, setSheetLink] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useRealtime(["connectors", "ingestion_logs"], () => connectors.refetch());
+
+  const extractSheetId = (link: string): string => {
+    const m = link.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return m ? m[1] : link.trim();
+  };
+
+  const connectSheets = async () => {
+    const id = extractSheetId(sheetLink);
+    if (!id) {
+      toast.error("Sahi Google Sheets link daalo");
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      await apiFetch("/connectors", {
+        method: "POST",
+        body: JSON.stringify({ type: "google_sheets", config: { sheet_id: id, range: "A1:Z1000" } }),
+      });
+      toast.success("Sheets connector live ✅");
+      setSheetLink("");
+      connectors.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Connect nahi hua");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    try {
+      await apiFetch(`/connectors/${id}`, { method: "DELETE" });
+      toast.success("Connector hata diya");
+      connectors.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Nahi ho paya");
+    }
+  };
+
+  const syncNow = async (id: number) => {
+    try {
+      await apiFetch(`/connectors/${id}/sync-now`, { method: "POST" });
+      toast.success("Sync shuru ✅");
+      connectors.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync nahi hua");
+    }
+  };
+
+  const statusChip = (s: string) => (
+    <span
+      className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide"
+      style={{ color: STATUS_TONE[s] || STATUS_TONE.offline, border: `1px solid ${STATUS_TONE[s] || STATUS_TONE.offline}` }}
+    >
+      {s}
+    </span>
+  );
+
+  return (
+    <Card delay={0.08} hover>
+      <h3 className="card-title">🔌 Live Connectors</h3>
+      <p className="card-sub mb-3">Google Sheets auto-sync • Excel/Tally local agent se</p>
+
+      <div className="mb-3 flex gap-1.5">
+        {(["google_sheets", "excel_agent", "tally_agent"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold"
+            style={
+              tab === t
+                ? { background: "var(--accent)", color: "#fff" }
+                : { border: "1px solid var(--card-border)" }
+            }
+          >
+            {t === "google_sheets" ? "Sheets" : t === "excel_agent" ? "Excel" : "Tally"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "google_sheets" && (
+        <div className="mb-3 space-y-2">
+          <label htmlFor="sheet-link" className="block text-sm font-semibold">Google Sheets link</label>
+          <input
+            id="sheet-link"
+            className="w-full rounded-xl border bg-transparent px-3 py-2 text-base outline-none"
+            style={{ borderColor: "var(--card-border)" }}
+            placeholder="https://docs.google.com/spreadsheets/d/…"
+            value={sheetLink}
+            onChange={(e) => setSheetLink(e.target.value)}
+            inputMode="url"
+          />
+          <div className="flex items-center gap-2">
+            <Button onClick={connectSheets} disabled={busy}>
+              {busy ? "Connecting…" : "Connect"}
+            </Button>
+            {msg && <span className="text-xs opacity-70">{msg}</span>}
+          </div>
+          <p className="text-[11px] opacity-60">
+            Sheet public honi chahiye (private sheets ke liye OAuth deferred). Backend har 60s poll karta hai.
+          </p>
+        </div>
+      )}
+
+      {tab === "excel_agent" && (
+        <div className="mb-3 rounded-xl border border-zinc-800 p-3 text-xs">
+          <p className="mb-1 font-semibold">Excel local agent (watch folder → auto-ingest)</p>
+          <pre className="overflow-auto rounded-lg bg-zinc-900 p-2 text-[11px] text-zinc-300">
+{`cd backend
+set BACKEND_URL=http://localhost:8000
+set TOKEN_FILE=.\connectors\\token.txt
+python connectors\\excel_sync.py`}
+          </pre>
+          <p className="mt-1 opacity-60">Token: pehle /login karo, JWT ko connectors/token.txt me save karo.</p>
+        </div>
+      )}
+
+      {tab === "tally_agent" && (
+        <div className="mb-3 rounded-xl border border-zinc-800 p-3 text-xs">
+          <p className="mb-1 font-semibold">Tally local agent (localhost:9000 → auto-ingest)</p>
+          <pre className="overflow-auto rounded-lg bg-zinc-900 p-2 text-[11px] text-zinc-300">
+{`cd backend
+set TALLY_URL=http://localhost:9000
+set BACKEND_URL=http://localhost:8000
+python connectors\\tally_sync.py`}
+          </pre>
+          <p className="mt-1 opacity-60">Tally ODBC/port 9000 pe chalu karo. Day Book vouchers sync hote hain.</p>
+        </div>
+      )}
+
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Connectors ({connectors.data?.length ?? 0})
+        </p>
+        {connectors.loading && !connectors.data ? (
+          <SkeletonCard lines={2} />
+        ) : connectors.error || !connectors.data ? (
+          <ErrorBanner message={connectors.error ?? "Connectors nahi mile"} onRetry={connectors.refetch} />
+        ) : connectors.data.length === 0 ? (
+          <p className="text-xs text-zinc-500">Abhi koi connector nahi — upar se Sheets link daalo ya agent chalao.</p>
+        ) : (
+          <div className="space-y-2">
+            {connectors.data.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 rounded-xl border border-zinc-800 p-2 text-xs">
+                <span className="font-semibold">{c.type === "google_sheets" ? "Sheets" : c.type === "excel_agent" ? "Excel" : "Tally"}</span>
+                {statusChip(c.status)}
+                <span className="ml-auto opacity-70">
+                  {c.rows_synced} rows{c.last_sync_at ? ` • ${fmtTime(c.last_sync_at)}` : ""}
+                </span>
+                {c.type === "google_sheets" && (
+                  <Button variant="outline" className="px-2 py-1 text-[11px]" onClick={() => syncNow(c.id)}>
+                    Sync now
+                  </Button>
+                )}
+                <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={() => remove(c.id)}>
+                  ✕
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /* ---------- main page ---------- */
 
 export default function DataPage() {
@@ -640,6 +832,8 @@ export default function DataPage() {
           </DropLabel>
         </Card>
       </div>
+
+      <ConnectorsCard meId={me.data?.id} />
 
       <DocumentsCard />
 
