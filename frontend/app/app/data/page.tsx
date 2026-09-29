@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBanner, FadeIn } from "@/components/fade-in";
 import { Badge } from "@/components/ui/badge";
@@ -781,6 +781,241 @@ const GRID_COLS: { letter: string; label: string; hint: string }[] = [
   { letter: "F", label: "Type", hint: "sale / purchase / expense" },
 ];
 
+/* ---------- scan bill modal (camera -> /documents/upload -> grid rows) ---------- */
+
+interface ScanMappedRow {
+  date: string;
+  product: string;
+  qty: string;
+  price: string;
+  customer: string;
+  type: GridType;
+}
+
+function mapDocEntries(entries: DocEntry[]): { rows: ScanMappedRow[]; docTypeNote: string } {
+  const rows: ScanMappedRow[] = [];
+  let other = 0;
+  for (const e of entries ?? []) {
+    const et = String(e.entry_type ?? "SALE").toUpperCase();
+    const type: GridType = et === "PURCHASE" ? "purchase" : "sale";
+    if (et !== "SALE" && et !== "PURCHASE") other += 1;
+    const qty = e.qty ?? null;
+    const amount = e.amount ?? null;
+    let price = "";
+    if (amount !== null && amount !== undefined && String(amount) !== "") {
+      const a = Number(amount);
+      const q = qty !== null && qty !== undefined && String(qty) !== "" ? Number(qty) : NaN;
+      price = !Number.isNaN(a) && !Number.isNaN(q) && q > 0 ? String(Math.round((a / q) * 100) / 100) : String(amount);
+    }
+    rows.push({
+      date: e.date ? String(e.date).slice(0, 10) : todayISO(),
+      product: e.item ? String(e.item) : "",
+      qty: qty !== null && qty !== undefined && String(qty) !== "" ? String(qty) : "",
+      price,
+      customer: e.party_name ? String(e.party_name) : "",
+      type,
+    });
+  }
+  return { rows, docTypeNote: other > 0 ? `${other} udhaar-type entry sale me daali — theek kar lena` : "" };
+}
+
+function ScanBillModal({
+  open,
+  onClose,
+  onEntries,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onEntries: (rows: ScanMappedRow[], docId: number | null, note: string) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [mode, setMode] = useState<"live" | "file" | "busy">("live");
+  const [msg, setMsg] = useState("");
+  const [noCamera, setNoCamera] = useState(false);
+
+  const stopStream = () => {
+    try {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    } catch {
+      /* ignore */
+    }
+    streamRef.current = null;
+  };
+
+  useEffect(() => {
+    if (!open) {
+      stopStream();
+      setMsg("");
+      setNoCamera(false);
+      setMode("live");
+      return;
+    }
+    setMsg("");
+    setNoCamera(false);
+    setMode("live");
+    let cancelled = false;
+    const start = async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("no-camera");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: "environment" } },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+      } catch {
+        if (!cancelled) {
+          setNoCamera(true);
+          setMode("file");
+          setMsg("Camera ki permission nahi mili — neeche se photo file chuno 📁");
+        }
+      }
+    };
+    start();
+    return () => {
+      cancelled = true;
+      stopStream();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open ]);
+
+  const uploadBlob = async (blob: Blob, name: string) => {
+    setMode("busy");
+    setMsg("Bill padh rahe hain… 🔍");
+    try {
+      const fd = new FormData();
+      fd.append("file", blob, name);
+      const r = await apiFetch<DocUploadResp>("/documents/upload", { method: "POST", body: fd });
+      const mapped = mapDocEntries(r.entries ?? []);
+      if (mapped.rows.length === 0) {
+        setMsg("Bill me kuch padha nahi gaya — saaf photo lo ya haath se grid me likho 🙏");
+        setMode(noCamera ? "file" : "live");
+        return;
+      }
+      onEntries(mapped.rows, r.doc_id ?? null, mapped.docTypeNote);
+      onClose();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Scan fail ho gaya — dobara try karo");
+      setMode(noCamera ? "file" : "live");
+    }
+  };
+
+  const capture = () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      setMsg("Camera abhi taiyaar nahi — 2 sec ruk ke dobara dabao");
+      return;
+    }
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas nahi bana");
+      ctx.drawImage(video, 0, 0);
+      stopStream();
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            setMsg("Photo nahi ban payi — dobara try karo");
+            setMode("live");
+            return;
+          }
+          uploadBlob(blob, "scan.jpg");
+        },
+        "image/jpeg",
+        0.85
+      );
+    } catch {
+      setMsg("Photo nahi ban payi — dobara try karo");
+    }
+  };
+
+  const onFile = (f: File | undefined) => {
+    if (!f) return;
+    uploadBlob(f, f.name || "scan.jpg");
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bill scan karo"
+    >
+      <div className="w-full max-w-[420px] rounded-2xl border border-zinc-700 bg-zinc-950 p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-zinc-100">📷 Bill Scan</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close scan"
+            className="rounded-lg px-2 py-1 text-lg text-zinc-400 hover:text-zinc-100"
+          >
+            ✕
+          </button>
+        </div>
+
+        {mode === "live" && !noCamera && (
+          <>
+            <div className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
+              <video ref={videoRef} playsInline muted autoPlay className="h-64 w-full object-cover" />
+            </div>
+            <Button className="mt-3 w-full py-3 text-base font-bold" onClick={capture}>
+              📸 Capture
+            </Button>
+            <button
+              type="button"
+              onClick={() => setMode("file")}
+              className="mt-2 w-full text-center text-xs text-zinc-400 underline"
+            >
+              ya file se photo chuno
+            </button>
+          </>
+        )}
+
+        {mode === "busy" && (
+          <div className="py-8 text-center">
+            <p className="text-3xl">🔍</p>
+            <p className="mt-2 text-sm text-zinc-300">Bill padh rahe hain…</p>
+          </div>
+        )}
+
+        {(mode === "file" || noCamera) && mode !== "busy" && (
+          <label className="mt-1 block cursor-pointer rounded-xl border-2 border-dashed border-zinc-700 px-4 py-6 text-center text-sm text-zinc-200 hover:border-zinc-500">
+            📁 Bill ki photo chuno
+            <Input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                onFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        )}
+
+        {msg && <p className="mt-2 text-xs font-semibold text-amber-300">{msg}</p>}
+        <p className="mt-2 text-[11px] text-zinc-500">
+          Scan ke baad entries grid me aayengi (marigold) — check karke Save dabao.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSaved: () => void }) {
   const [rows, setRows] = useState<GridRowState[]>(() => [blankRow(), blankRow(), blankRow()]);
   const [errors, setErrors] = useState<CellErrors>({});
@@ -790,6 +1025,19 @@ function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSave
   const [showMini, setShowMini] = useState<number | null>(null);
   const [miniName, setMiniName] = useState("");
   const [miniPrice, setMiniPrice] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanDocId, setScanDocId] = useState<number | null>(null);
+
+  const onScanEntries = (mapped: ScanMappedRow[], docId: number | null, note: string) => {
+    setRows((rs) => [
+      ...rs,
+      ...mapped.map((m) => ({ ...blankRow(), ...m, fromScan: true as boolean })),
+    ]);
+    setScanDocId(docId);
+    toast.success(
+      `${mapped.length} entries scan se grid me ✅${note ? ` — ${note}` : ""} (Documents wala pending bill DISCARD kar dena)`
+    );
+  };
 
   const productNames = [
     ...(products ?? []).map((p) => p.name).filter(Boolean),
@@ -859,6 +1107,15 @@ function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSave
       if (r.rows_inserted > 0) {
         toast.success(`${r.rows_inserted} rows saved ✅`);
         setRows([blankRow(), blankRow(), blankRow()]);
+        if (scanDocId !== null) {
+          // double-entry rokho: scan wala pending doc ab grid me save ho gaya
+          try {
+            await apiFetch(`/documents/${scanDocId}/reject`, { method: "POST" });
+          } catch {
+            /* best-effort — user Documents card se discard kar sakta hai */
+          }
+          setScanDocId(null);
+        }
         onSaved();
       } else {
         toast.warning("Koi row save nahi hui — sab skipped");
@@ -879,10 +1136,16 @@ function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSave
 
   return (
     <Card delay={0.06} hover>
-      <h3 className="card-title">📝 Direct Entry — seedha likho, sync ho jayega</h3>
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <h3 className="card-title">📝 Direct Entry — seedha likho, sync ho jayega</h3>
+        <Button variant="outline" className="ml-auto px-3 py-1.5 text-xs" onClick={() => setScanOpen(true)}>
+          📷 Scan Bill
+        </Button>
+      </div>
       <p className="card-sub mb-3">
         Excel jaisa grid — sale / purchase (stock khareed) / expense (kharcha). Purchase → khareed ledger me, expense ka head B column me likho.
       </p>
+      <ScanBillModal open={scanOpen} onClose={() => setScanOpen(false)} onEntries={onScanEntries} />
       {/* horizontal scroll SIRF card ke andar — page scroll nahi hoga */}
       <div className="overflow-x-auto rounded-xl border border-zinc-800">
         <table className="w-full min-w-[760px] border-collapse text-left text-xs">
@@ -903,8 +1166,20 @@ function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSave
               const re = errors[r.key] ?? {};
               const isNewChoice = r.product === "__new__";
               return (
-                <tr key={r.key} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
-                  <td className="border border-zinc-800 px-2 py-1.5 text-center font-mono text-zinc-500">{i + 1}</td>
+                <tr
+                  key={r.key}
+                  className={`border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40 ${
+                    r.fromScan ? "bg-amber-500/10" : ""
+                  }`}
+                >
+                  <td className="border border-zinc-800 px-2 py-1.5 text-center font-mono text-zinc-500">
+                    {i + 1}
+                    {r.fromScan && (
+                      <span className="mt-0.5 block rounded-full px-1 text-[9px] font-bold" style={{ background: "var(--marigold)", color: "#000" }}>
+                        scan
+                      </span>
+                    )}
+                  </td>
                   <td className="border border-zinc-800">
                     <input
                       className={`${cellCls(!!re.date)} font-mono`}
