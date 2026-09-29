@@ -265,3 +265,15 @@ class VoiceLog(Base):
     language = Column(String(8), nullable=True)
     transcript = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = _owner_col()
+    kind = Column(String(16), default="other", nullable=False)  # supplier|customer|distributor|other
+    name = Column(String(128), nullable=False)
+    phone = Column(String(32), index=True, nullable=False)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

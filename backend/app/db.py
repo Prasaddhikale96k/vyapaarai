@@ -261,6 +261,77 @@ def ensure_p15_schema() -> None:
         pass
 
 
+def ensure_contacts_schema() -> None:
+    """One-shot P2: contacts table + backfill from products.supplier_phone
+    (kind=supplier) and customers (kind=customer), deduped by (owner_id, phone).
+
+    Additive + non-destructive, idempotent, sqlite+PG safe, never raises.
+    """
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        pass
+    try:
+        from app.models import Contact, Customer, Product
+
+        db = SessionLocal()
+        try:
+            seen: set = set()
+            try:
+                for c in db.query(Contact).all():
+                    try:
+                        seen.add((int(getattr(c, "owner_id", 1) or 1),
+                                  str(getattr(c, "phone", "") or "")))
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            changed = False
+            try:
+                prods = db.query(Product).all()
+            except Exception:
+                prods = []
+            for p in prods:
+                try:
+                    oid = int(getattr(p, "owner_id", 1) or 1)
+                    ph = "".join(ch for ch in str(getattr(p, "supplier_phone", "") or "") if ch.isdigit())
+                    if not ph or (oid, ph) in seen:
+                        continue
+                    db.add(Contact(owner_id=oid, kind="supplier",
+                                   name=str(getattr(p, "name", "") or "") or "Supplier",
+                                   phone=ph, note=f"from product {getattr(p, 'sku', '') or ''}"))
+                    seen.add((oid, ph))
+                    changed = True
+                except Exception:
+                    continue
+            try:
+                custs = db.query(Customer).all()
+            except Exception:
+                custs = []
+            for cu in custs:
+                try:
+                    oid = int(getattr(cu, "owner_id", 1) or 1)
+                    ph = "".join(ch for ch in str(getattr(cu, "phone", "") or "") if ch.isdigit())
+                    if not ph or (oid, ph) in seen:
+                        continue
+                    db.add(Contact(owner_id=oid, kind="customer",
+                                   name=str(getattr(cu, "name", "") or "") or "Customer",
+                                   phone=ph))
+                    seen.add((oid, ph))
+                    changed = True
+                except Exception:
+                    continue
+            if changed:
+                db.commit()
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def ensure_prod_schema() -> None:
     """Production indexes for Postgres (idempotent, PG-only, never raises).
 

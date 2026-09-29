@@ -49,7 +49,21 @@ def approve_action(action_id: int, db: Session = Depends(get_db), owner=Depends(
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=str(exc))
-    delivery = send_text(a.target_phone or "", a.draft_message or "")
+    # one-shot P2: reorder approve -> supplier contact auto-create + signature line
+    try:
+        from app.routers.contacts import ensure_supplier_contact, sign_message
+
+        if str(getattr(a, "type", "") or "") == "reorder":
+            ensure_supplier_contact(db, oid, str(getattr(a, "target_name", "") or ""),
+                                    str(getattr(a, "target_phone", "") or ""))
+        try:
+            biz = str(getattr(owner, "business_name", "") or "").strip() if owner is not None else ""
+        except Exception:
+            biz = ""
+        text = sign_message(str(getattr(a, "draft_message", "") or ""), biz)
+    except Exception:
+        text = str(getattr(a, "draft_message", "") or "")
+    delivery = send_text(a.target_phone or "", text)
     try:
         simulated = bool(delivery.get("simulated", True))
     except Exception:

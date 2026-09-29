@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronsLeft, ChevronsRight, Database, LayoutDashboard, MessageCircle, Zap } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Database, LayoutDashboard, MessageCircle, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -97,6 +97,7 @@ export function Sidebar() {
     { href: "/app/chat", label: t("nav_copilot"), icon: MessageCircle },
     { href: "/app/data", label: t("nav_data"), icon: Database },
     { href: "/app/actions", label: t("nav_actions"), icon: Zap },
+    { href: "/app/contacts", label: t("nav_contacts"), icon: Users },
   ];
   return (
     <>
