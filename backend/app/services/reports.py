@@ -236,6 +236,34 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
     else:
         story.append(Paragraph("Koi pending action nahi — Generate dabao ⚡", cell))
 
+    stamp = datetime.now().strftime("%d-%b %H:%M")
+
+    def _footer(canvas, _doc):
+        try:
+            canvas.saveState()
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.grey)
+            canvas.drawString(
+                14 * mm,
+                10 * mm,
+                f"AI suggests. Owner decides. • generated {stamp}",
+            )
+            canvas.restoreState()
+        except Exception:
+            pass
+
+    try:
+        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    except Exception as exc:
+        logger.warning("pdf build failed: %s", str(exc)[:200])
+        # minimal fallback — still a valid PDF
+        buf = io.BytesIO()
+        doc2 = SimpleDocTemplate(buf, pagesize=A4)
+        doc2.build([Paragraph(f"{biz} daily report unavailable: {exc}"[:200],
+                              styles["Normal"])])
+    return buf.getvalue()
+
+
 def _monthly_trend(db, owner_id: int, months: int = 6) -> list:
     """Last-N-months revenue buckets (portable: bucketed in Python, sqlite+PG safe)."""
     from datetime import date as _date
