@@ -552,3 +552,42 @@ F1 lang + UTF-8 + viewport + doctype (critical). F2 Semantic landmarks, one h1, 
 ## S10 — HOW TO AUDIT THIS FILE (for external Claude)
 1. Read S1 intents as law. 2. Diff them against S7/S8 — every YES-gap is a candidate bug. 3. Validate each candidate against the S2–S5 evidence (file:line refs provided). 4. Output a prioritized bug list (severity, user impact, exact files to change, suggested fix shape) without touching the repo. 5. Mark anything unverifiable UNKNOWN rather than inventing.
 
+---
+
+## S11 — P15 ADDENDUM (2026-09-29, implementation pass)
+
+### Role model (owner-stated, FINAL — supersedes any earlier assumption)
+- ASSISTANT/BRIDGE = 919511996418 (old spare SIM; this WhatsApp account IS VyapaarAI). OpenWA session identity; inbound fromMe auto-dropped; never stored in owner_profiles/seed.
+- OWNER/ADMIN = 919834854511 (owner's main phone; seed/demo owner; no migration).
+- `ALLOWED_INBOUND_PHONES=919834854511`. Config reads: `ASSISTANT_PHONE`, `OWNER_PHONE`, `ADMIN_PHONE` in app/config.py.
+
+### Production auth (I5 closed)
+- ENVIRONMENT=production. `/auth/otp/request` never returns dev_otp in prod (honest sent:false + error); WA replies never echo OTP in prod (owners.py). Startup assertion `_assert_prod_auth_guard()` (main.py). RUNBOOK.md covers bridge-down drill + incident mode.
+- S8#12 → FIXED. S8#14 → FIXED (ADMIN_PHONE=919834854511).
+
+### Registration model (I1/I2/I3 closed)
+- owner_profiles.business_type (String 32) + distributors (Text JSON array). ensure_p15_schema() backfills distributors from distributor_phone; distributor_phone mirrors distributors[0]. serialize_owner exposes both.
+- RegisterRequest.business_type: 11-code enum (required, 422 on garbage). distributors: list, 10–13 digits, dedupe, max 5.
+- GET /distributors/lookup?q= (auth optional): approved owner_profiles, phone-prefix OR name/business substring, limit 8. Smart-picker source (I1).
+- WA machine: NAME → BUSINESS (free text, unchanged) → CATEGORY (numbered 1–11, same enum) → DISTRIBUTOR (comma-separated ≤5) → LANGUAGE → OTP. BUSINESS_TYPES + _parse_category + _parse_distributors in services/owners.py.
+- S8#1/#2/#3 → FIXED. S8#4/#5/#7/#8/#22 → FIXED (register revamp: labels, inline errors, autocomplete, 16px inputs, human language names, 3-bullet what-next). S8#6 → FIXED (login OTP exactly 6).
+
+### Scoping + transport (S8#10/#16/#17 closed)
+- POST /brief/send: JWT required (get_current_owner), scoped to auth owner; OWNER_PHONE/first-profile fallback removed from build_and_send_brief (returns honest error when owner=None).
+- POST /webhook/whatsapp: verifies `x-webhook-secret` header against WEBHOOK_SECRET via hmac.compare_digest; 401 on missing/mismatch. Header documented in RUNBOOK-adjacent code comment + PROJECT_STATUS.
+- HSTS (`max-age=31536000; includeSubDomains`) + CSP (default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' fonts.googleapis; font-src fonts.gstatic; img-src data:/blob:; connect-src Supabase REST+wss; frame-ancestors 'none') on every response via RequestIDMiddleware.
+
+### Connectors architecture (new surface)
+- Connector model + routers/connectors.py (GET/POST/DELETE /connectors, POST sync-now, POST /connectors/ingest 20/min JWT). services/connectors.py: Sheets 60s poll (GOOGLE_API_KEY, sha256 diff → sales ingestion → invalidate → realtime via ingestion_logs), ingest_agent_rows (excel|tally → ingest_dataframe).
+- Local agents: backend/connectors/excel_sync.py (watchdog → /connectors/ingest, BACKEND_URL + token file) + tally_sync.py (localhost:9000 Day-Book XML, Tally.Py envelope, state marker). Lens repos (Tally.Py, tally-portal) cloned to temp, read, deleted; deps never installed.
+- UI: /app/data Live Connectors card (tabs, Sheets link+Connect, agent cmd docs, status chips, realtime + 300s poll).
+
+### Seed truth (S8#20 closed)
+- 40 products, EXACTLY 18 below reorder_level; voice_logs (new model) seeded to EXACTLY 2,847 rows owner 1; ₹53,400 overdue lock + random.seed(7) kept.
+
+### Stale lore corrected (S8#27)
+- PROJECT_STATUS §G3 (no group filter) STALE → group-ignore present (whatsapp_flow._looks_group). §G4 (reset unguarded) STALE → admin-gated. Allowlist implemented (ALLOWED_INBOUND_PHONES + gate). This addendum + PROJECT_STATUS P15 section are the current truth.
+
+### Accepted/deferred (explicit, with reasons)
+- S8#9 (reset per-owner scoping), #11 (chat_messages owner_id), #13 (id==1 admin — kept), #15 (simulated-notify honesty — already flagged), #18 (httpOnly), #19 (CAPTCHA), #21 (lang passthrough), #23/#24 (footer/SRI), #25 (norm dedupe), #26 (onboarded nudge), #28 (chat deep-link): see PROJECT_STATUS P15 disposition table.
+

@@ -20,11 +20,13 @@ from app.models import (
     Product,
     Receivable,
     Sale,
+    VoiceLog,
 )
 
 BUSINESS_NAME = "Sharma Kirana Traders"
 
 # sku, name, category, sale_price, base_daily_qty
+# 40 products; EXACTLY 18 below reorder_level (landing "18 SKUs" true)
 PRODUCTS = [
     # Staples - margin ~8%
     ("ST-ATTA-5KG", "Aashirvaad Atta 5kg", "Staples", 285.0, 14),
@@ -33,24 +35,54 @@ PRODUCTS = [
     ("ST-DAL-1KG", "Toor Dal 1kg", "Staples", 165.0, 11),
     ("ST-OIL-1L", "Fortune Oil 1L", "Staples", 155.0, 12),
     ("ST-SALT-1KG", "Tata Salt 1kg", "Staples", 30.0, 18),
+    ("ST-GHEE-1L", "Amul Ghee 1L", "Staples", 620.0, 4),
+    ("ST-MASALA-100", "Everest Garam Masala 100g", "Staples", 65.0, 8),
     # Personal Care - margin ~25%
     ("PC-SOAP", "Lux Soap 150g", "Personal Care", 45.0, 10),
     ("PC-SHAMPOO", "Clinic Shampoo 340ml", "Personal Care", 199.0, 5),
     ("PC-PASTE", "Colgate 150g", "Personal Care", 110.0, 7),
     ("PC-DETERGENT", "Surf Excel 1kg", "Personal Care", 135.0, 6),
     ("PC-CREAM", "Fair Cream 50g", "Personal Care", 85.0, 5),
+    ("PC-TOOTHBRUSH", "Colgate Toothbrush", "Personal Care", 35.0, 9),
+    ("PC-HANDWASH", "Dettol Handwash 200ml", "Personal Care", 99.0, 6),
     # Beverages - margin ~15%
     ("BV-TEA-500", "Tata Tea 500g", "Beverages", 285.0, 8),
     ("BV-COFFEE-200", "Bru Coffee 200g", "Beverages", 310.0, 4),
     ("BV-COLD-750", "Coke 750ml", "Beverages", 40.0, 16),
     ("BV-JUICE-1L", "Real Juice 1L", "Beverages", 130.0, 6),
+    ("BV-WATER-1L", "Bisleri Water 1L", "Beverages", 20.0, 22),
+    ("BV-MILK-500", "Amul Milk 500ml", "Beverages", 27.0, 25),
     # Snacks - margin ~18%
     ("SN-BISC-300", "Parle Biscuits 300g", "Snacks", 35.0, 18),
     ("SN-CHIPS-150", "Lays Chips 150g", "Snacks", 50.0, 12),
     ("SN-NAMKEEN-400", "Haldiram Namkeen 400g", "Snacks", 95.0, 7),
+    ("SN-CHOC-100", "Dairy Milk 100g", "Snacks", 90.0, 10),
+    ("SN-NOODLES-280", "Maggi Noodles 280g", "Snacks", 56.0, 14),
+    # Home Care - margin ~20%
+    ("HC-DET-1L", "Wheel Detergent 1L", "Home Care", 120.0, 8),
+    ("HC-SOAP-250", "Vim Soap 250g", "Home Care", 30.0, 12),
+    ("HC-CLEAN-500", "Lizol Cleaner 500ml", "Home Care", 110.0, 5),
+    ("HC-AGARBATTI", "Zed Black Agarbatti", "Home Care", 45.0, 9),
+    # Stationery - margin ~22%
+    ("SY-PEN-10", "Reynolds Pen (10)", "Stationery", 50.0, 10),
+    ("SY-NOTE-200", "Classmate Notebook", "Stationery", 60.0, 8),
+    ("SY-PENCIL-10", "Natraj Pencil (10)", "Stationery", 30.0, 12),
+    # Electrical - margin ~12%
+    ("EL-BULB-40W", "Philips Bulb 40W", "Electrical", 80.0, 8),
+    ("EL-EXT-5M", "Havells Extension 5m", "Electrical", 250.0, 4),
+    # Frozen - margin ~16%
+    ("FZ-ICE-1L", "Ice Cream 1L", "Frozen", 150.0, 6),
+    ("FZ-FRIES-1KG", "Frozen Fries 1kg", "Frozen", 180.0, 5),
+    # Pet Care - margin ~20%
+    ("PT-DOG-1KG", "Dog Food 1kg", "Pet Care", 350.0, 4),
+    ("PT-CAT-500", "Cat Food 500g", "Pet Care", 220.0, 3),
+    ("PT-BIRD-500", "Bird Food 500g", "Pet Care", 150.0, 3),
 ]
 
-MARGIN = {"Staples": 0.08, "Personal Care": 0.25, "Beverages": 0.15, "Snacks": 0.18}
+MARGIN = {
+    "Staples": 0.08, "Personal Care": 0.25, "Beverages": 0.15, "Snacks": 0.18,
+    "Home Care": 0.20, "Stationery": 0.22, "Electrical": 0.12, "Frozen": 0.16, "Pet Care": 0.20,
+}
 
 CUSTOMERS = [
     ("Ramesh Verma", "9123456780"),
@@ -63,13 +95,22 @@ CUSTOMERS = [
     ("Mohan Lal", "9890123457"),
 ]
 
-# 5 SKUs just below reorder; 2 dead SKUs (stock ~40, zero sales last 45 days)
-LOW_STOCK_SKUS = ["ST-ATTA-5KG", "ST-RICE-5KG", "ST-SUGAR-1KG", "PC-SOAP", "BV-TEA-500"]
+# EXACTLY 18 SKUs below reorder_level (landing "18 SKUs Auto-Flagged Low Stock" true)
+LOW_STOCK_SKUS = [
+    "ST-ATTA-5KG", "ST-RICE-5KG", "ST-SUGAR-1KG", "PC-SOAP", "BV-TEA-500",
+    "PC-PASTE", "SN-BISC-300", "BV-COLD-750", "ST-OIL-1L", "PC-DETERGENT",
+    "SN-CHIPS-150", "HC-DET-1L", "SY-NOTE-200", "EL-BULB-40W", "FZ-ICE-1L",
+    "ST-DAL-1KG", "PC-SHAMPOO", "BV-MILK-500",
+]
+# 2 dead SKUs (stock ~40, zero sales last 45 days) — NOT below reorder
 DEAD_SKUS = ["BV-JUICE-1L", "SN-NAMKEEN-400"]
+
+# Landing "2,847 Voice Entries Processed" — EXACTLY this many for owner 1
+VOICE_LOG_COUNT = 2847
 
 
 def wipe(db) -> None:
-    for m in (Sale, InventoryItem, Receivable, Expense, Action, DocumentLog, ChatMessage, IngestionLog):
+    for m in (Sale, InventoryItem, Receivable, Expense, Action, DocumentLog, ChatMessage, IngestionLog, VoiceLog):
         db.query(m).delete()
     for m in (Product, Customer):
         db.query(m).delete()
@@ -214,6 +255,22 @@ def run_seed() -> Dict[str, int]:
                 stock = float(random.randint(25, 60))
             db.add(InventoryItem(product_id=pid, stock_qty=stock, reorder_level=reorder, as_of=today))
 
+        # --- voice logs: EXACTLY 2,847 for owner 1 (landing number true) ---
+        voice_langs = ["hi", "hi", "hi", "mr", "en", "gu", "ta"]
+        voice_samples = [
+            "aaj ka sale kitna hai", "stock check karo", "payment reminder bhejo",
+            "forecast dikhao", "overdue list chahiye", "naya order karna hai",
+            "profit kitna hua", "credit score kya hai", "report bhejo",
+            "distributor se baat karo", "inventory update karo", "brief sunao",
+        ]
+        for i in range(VOICE_LOG_COUNT):
+            db.add(VoiceLog(
+                owner_id=1,
+                duration_s=random.randint(8, 120),
+                language=random.choice(voice_langs),
+                transcript=random.choice(voice_samples),
+            ))
+
         # --- receivables: 7 paid + exactly 3 unpaid overdue ---
         paid_invoices = [
             ("INV-1031", "Amit Patel", 6500.0, 60),
@@ -274,6 +331,7 @@ def run_seed() -> Dict[str, int]:
             "inventory": db.query(InventoryItem).count(),
             "receivables": db.query(Receivable).count(),
             "expenses": db.query(Expense).count(),
+            "voice_logs": db.query(VoiceLog).count(),
         }
         return counts
     finally:

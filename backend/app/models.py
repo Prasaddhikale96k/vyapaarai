@@ -252,3 +252,14 @@ class Connector(Base):
     last_sync_at = Column(DateTime, nullable=True)
     rows_synced = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class VoiceLog(Base):
+    __tablename__ = "voice_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = _owner_col()
+    duration_s = Column(Integer, default=0, nullable=False)
+    language = Column(String(8), nullable=True)
+    transcript = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

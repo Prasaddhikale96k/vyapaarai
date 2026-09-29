@@ -319,3 +319,60 @@ ightly_report cron; dashboard report popover.
 - CHECK-10 backend untouched: diff since phase-0 contains ONLY app/page.tsx, app/layout.tsx (fonts link + landing.css import), components/landing/**, hooks/useCountUp.ts (landing-only, C5-sanctioned), styles/landing.css, tailwind.config.ts (+ phase-0: PROJECT_STATUS.md, page.tsx.bak, .opencode/skills). app/globals.css + tsconfig.tsbuildinfo reverted to HEAD. PASS.
 - Downgrades: (1) Second Lenis instance → NOT created (global Smooth provider already has verbatim canonical wiring; double-drive = jitter). (2) MagicUI NumberTicker → hand-rolled useCountUp. Lenis itself NOT disabled (works via provider).
 - Side effects to know: `.font-display` now resolves Playfair (was Fraunces) wherever the class is used, including /app dashboard — serif-to-serif, low risk. Google Fonts <link> needs internet at view time; Georgia/system-ui fallbacks otherwise.
+
+## P15 FULL PRODUCT PASS (2026-09-29) — P15 VERIFY: 8/8
+
+### Role model (owner-stated, FINAL)
+- ASSISTANT/BRIDGE = 919511996418 (old spare SIM, low traffic — this WhatsApp account IS VyapaarAI).
+- OWNER/ADMIN = 919834854511 (owner's main phone — logs in, gets OTPs/alerts/reports). Seed/demo owner unchanged.
+- `ALLOWED_INBOUND_PHONES=919834854511`; bridge number never stored in owner_profiles/seed. Bridge fromMe auto-dropped.
+
+### Production auth (Phase 1)
+- `ENVIRONMENT=production` in backend/.env. `/auth/otp/request` never returns dev_otp in prod (honest `{"sent": false, "error"}` when gateway down); WA registration replies never echo OTP code in prod. Startup assertion `_assert_prod_auth_guard()` in main.py pins this. Pinned by verify_p15 check 2.
+- RUNBOOK.md: bridge-down drill (old phone ON + QR re-scan + /whatsapp/status) + INCIDENT MODE (one-line ENVIRONMENT flip + revert).
+- WAITING-ON-HUMAN: old-SIM QR scan + OTP-arrival smoke + pending-register + wrong-OTP-3-attempt paths (steps in RUNBOOK.md).
+
+### Auth/registration hardening (Phase 2, PROJECT_DEEPDIVE S7/S8)
+- Schema: owner_profiles += business_type + distributors (JSON array); ensure_p15_schema backfills distributors from distributor_phone (mirrored to [0]); serialize_owner exposes both.
+- API: RegisterRequest business_type enum (11, required) + distributors list (dedupe, max 5); GET /distributors/lookup (approved owners, phone-prefix/name-substring, limit 8); POST /brief/send JWT-required + owner-scoped (OWNER_PHONE/first-profile fallback removed); webhook HMAC via `x-webhook-secret` header (401 on mismatch); HSTS + CSP headers (CSP: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' fonts.googleapis; font-src fonts.gstatic; img-src data:/blob:; connect-src Supabase REST+wss; frame-ancestors 'none').
+- UI: register revamp (labels, inline errors, autocomplete, 16px+ inputs, business_type select, distributor chips + lookup picker + manual, human language names, 3-bullet what-next); login OTP exactly-6-digits; admin cards show business_type badge + distributor chips + language.
+- WA machine: NAME → BUSINESS (free text) → CATEGORY (numbered 1-11) → DISTRIBUTOR (comma-separated ≤5) → LANGUAGE → OTP.
+- S8#13 kept: id==1 always admin; RUNBOOK notes prod DB must never reuse demo seed.
+
+### Live connectors (Phase 3)
+- Connector model (owner_id, type, config JSON, status, last_sync_at, rows_synced). Routers: GET/POST/DELETE /connectors, POST /connectors/{id}/sync-now, POST /connectors/ingest (JWT, 20/min, {source: excel|tally, rows} → ingestion alias-maps → ingestion_logs).
+- Google Sheets: 60s APScheduler poll, values.get via GOOGLE_API_KEY (public sheets; private-sheet OAuth deferred), sha256 row-diff → sales ingestion → rows_synced/last_sync_at → intel invalidate. Missing key → status=error with honest message.
+- Local agents: backend/connectors/excel_sync.py (+.cmd, watchdog → /connectors/ingest) + tally_sync.py (+.cmd, localhost:9000 Day-Book XML per Tally.Py envelope patterns, last-sync marker). Reference repos cloned to temp, read, deleted. watchdog already in requirements.
+- UI: /app/data "Live Connectors" card (type tabs, Sheets link+Connect, Excel/Tally cmd instructions, status chips + last_sync + rows_synced, realtime + 300s poll).
+
+### Seed truth (Phase 4)
+- 40 products, EXACTLY 18 below reorder_level (landing "18 SKUs" true); voice_logs table seeded to EXACTLY 2,847 rows for owner 1 (landing number true); ₹53,400 overdue lock + random.seed(7) kept.
+
+### S8 disposition (vs PROJECT_DEEPDIVE.md S8)
+| # | Item | Disposition |
+|---|---|---|
+| 1-3 | distributor model/picker/blind-text | FIXED (distributors JSON + lookup + picker + WA multi) |
+| 4,5,7,8,22 | register labels/inline/lang/pending/mobile | FIXED (revamp) |
+| 6 | OTP 6-vs-4 mismatch | FIXED (exactly 6) |
+| 9 | /data/reset global wipe | ACCEPTED (admin-gated earlier; per-owner scoping deferred) |
+| 10 | /brief/send unscoped | FIXED (JWT + owner-scoped, fallback removed) |
+| 11 | chat_messages phone-keyed | ACCEPTED (works; migration risk > benefit) |
+| 12 | dev-OTP disclosure | FIXED (prod guard + startup assert + verify pin) |
+| 13 | id==1 hardcoded admin | ACCEPTED (kept deliberately; prod-DB note in RUNBOOK) |
+| 14 | ADMIN_PHONE empty | FIXED (set to 919834854511) |
+| 15 | approve-notify simulated | ACCEPTED (honest `simulated` flag already surfaced) |
+| 16 | webhook no HMAC | FIXED (x-webhook-secret verify, 401) |
+| 17 | no CSP/HSTS | FIXED (headers added, CSP reported above) |
+| 18 | JWT in localStorage | ACCEPTED (httpOnly migration deferred) |
+| 19 | no CAPTCHA on register | ACCEPTED (10/min IP limit; CAPTCHA deferred) |
+| 20 | 18 SKUs / 2,847 provenance | FIXED (seed now literally true) |
+| 21 | lang passthrough | ACCEPTED (norm + enum on web; WA _norm_lang covers) |
+| 23,24 | footer/SRI/fonts | ACCEPTED (out of P15 scope; landing untouched per safety law) |
+| 25 | phone normalization dupe | ACCEPTED (works; refactor deferred) |
+| 26 | onboarded nudge | ACCEPTED (wizard exists; nudge flow deferred) |
+| 27 | stale §G3/§G4 lore | CORRECTED (group-ignore + allowlist + admin-gated reset present) |
+| 28 | chat→approve hop | ACCEPTED (chips exist; deep-link deferred) |
+
+### Verify state (P15 close)
+- `verify_p15.py`: 8/8 (schema, prod-guard subprocess, connectors routes, seed truth, enum 422, valid register, webhook HMAC, HSTS+CSP).
+- Honest gaps: Sheets OAuth for private sheets = deferred; old-SIM QR smoke = WAITING-ON-HUMAN; prod DB (Supabase) not reseeded in this pass (seed truth proven on sqlite; `/data/reset` remains the prod-reseed path via admin).
