@@ -102,12 +102,14 @@ def _extract_openwa(payload: dict, data: dict) -> dict | None:
                 out["bytes"] = raw
             return out
         if mtype == "image":
-            out = {"kind": "image", "filename": fname or "photo.jpg", **base}
+            out = {"kind": "image", "filename": fname or "photo.jpg",
+                   "caption": text, **base}
             if raw is not None:
                 out["bytes"] = raw
             return out
         if mtype == "document":
-            out = {"kind": "document", "filename": fname or "document", **base}
+            out = {"kind": "document", "filename": fname or "document",
+                   "caption": text, **base}
             if raw is not None:
                 out["bytes"] = raw
             return out
@@ -425,6 +427,17 @@ def _handle_text(db, profile, incoming: dict, owner_id: int = 1) -> None:
             except Exception:
                 _reply(phone, "Kuch gadbad ho gayi, thodi der mein dobara try karein 🙏")
             return
+    # P8-F2 scheme radar: supplier scheme text -> verdict + pending action
+    try:
+        from app.services import schemes as _schemes
+
+        sch = _schemes.handle_scheme(db, profile, text, owner_id=oid)
+    except Exception as exc:
+        logger.info("scheme hook failed: %s", str(exc)[:150])
+        sch = {"handled": False}
+    if isinstance(sch, dict) and sch.get("handled"):
+        _reply(phone, str(sch.get("reply") or _schemes.FALLBACK_MSG))
+        return
     # normal chat path
     try:
         lang = detect_language(text)
@@ -499,6 +512,18 @@ def _handle_media(db, profile, incoming: dict, owner_id: int = 1) -> None:
 
     oid = int(owner_id or 1)
     phone = incoming["phone"]
+    # P8-F2: scheme caption on photo/document ("Parle-G 10+1 ...") -> scheme path first
+    try:
+        from app.services import schemes as _schemes
+
+        probe = str(incoming.get("caption", "") or "").strip()
+        if probe and _schemes.looks_like_scheme(probe):
+            sch = _schemes.handle_scheme(db, profile, probe, owner_id=oid)
+            if isinstance(sch, dict) and sch.get("handled"):
+                _reply(phone, str(sch.get("reply") or _schemes.FALLBACK_MSG))
+                return
+    except Exception as exc:
+        logger.info("scheme caption hook failed: %s", str(exc)[:150])
     try:
         media = _incoming_bytes(incoming)
     except Exception:
