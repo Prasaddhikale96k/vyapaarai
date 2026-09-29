@@ -279,6 +279,35 @@ def _reply(phone: str, text: str) -> None:
         notify.send_text(phone, text)
     except Exception as exc:
         logger.info("reply failed: %s", str(exc)[:200])
+    # one-shot P3: persist outbound assistant reply (attributable profiles only)
+    try:
+        from app.db import SessionLocal
+        from app.models import ChatMessage, OwnerProfile
+
+        digits = _openwa_digits(phone)
+        if not digits or not str(text or "").strip():
+            return
+        db = SessionLocal()
+        try:
+            prof = db.query(OwnerProfile).filter(OwnerProfile.phone == digits).first()
+            if prof is None:
+                return
+            try:
+                lang = str(getattr(prof, "language", "") or "hi") or "hi"
+            except Exception:
+                lang = "hi"
+            db.add(ChatMessage(
+                session_phone=digits, owner_id=int(getattr(prof, "id", 1) or 1),
+                role="assistant", content=str(text or "")[:4000],
+                language=lang, source="whatsapp"))
+            db.commit()
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _incoming_bytes(incoming: dict):
@@ -419,7 +448,7 @@ def _handle_text(db, profile, incoming: dict, owner_id: int = 1) -> None:
         except Exception:
             pass
     try:
-        result = orchestrate(text, phone=phone, owner_id=oid)
+        result = orchestrate(text, phone=phone, owner_id=oid, source="whatsapp")
         reply_text = str(result.get("answer", "") or "")
     except Exception as exc:
         logger.info("orchestrate failed: %s", str(exc)[:300])
@@ -463,7 +492,7 @@ def _handle_audio(db, profile, incoming: dict, owner_id: int = 1) -> None:
         except Exception:
             pass
     try:
-        result = orchestrate(transcript, phone=phone, owner_id=oid)
+        result = orchestrate(transcript, phone=phone, owner_id=oid, source="whatsapp")
         answer = str(result.get("answer", "") or "")
     except Exception:
         answer = "Kuch gadbad ho gayi, thodi der mein dobara try karein 🙏"

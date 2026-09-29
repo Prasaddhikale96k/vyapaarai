@@ -332,6 +332,91 @@ def ensure_contacts_schema() -> None:
         pass
 
 
+def ensure_chat_thread_schema() -> None:
+    """One-shot P3: chat_messages.owner_id + source; backfill owner_id by
+    phone match where possible (unmatched/'web' rows stay owner 1).
+
+    Additive + non-destructive, idempotent, sqlite+PG safe, never raises.
+    """
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text as _text
+
+        is_sqlite = str(engine.url).startswith("sqlite")
+        cols = {"owner_id": "INTEGER DEFAULT 1", "source": "VARCHAR(8) DEFAULT 'web'"}
+        with engine.connect() as conn:
+            if is_sqlite:
+                try:
+                    rows = conn.execute(_text("PRAGMA table_info(chat_messages)")).fetchall()
+                    have = {r[1] for r in rows} if rows else set()
+                except Exception:
+                    have = set()
+                for col, ddl in cols.items():
+                    if col not in have:
+                        try:
+                            conn.execute(_text(f"ALTER TABLE chat_messages ADD COLUMN {col} {ddl}"))
+                            conn.commit()
+                        except Exception:
+                            pass
+            else:
+                ddls = {"owner_id": "INTEGER DEFAULT 1", "source": "VARCHAR(8) DEFAULT 'web'"}
+                for col, ddl in ddls.items():
+                    try:
+                        conn.execute(_text(
+                            f"ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                        conn.commit()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+        try:
+            from app.models import ChatMessage, OwnerProfile
+
+            db = SessionLocal()
+            try:
+                pmap = {}
+                try:
+                    for p in db.query(OwnerProfile).all():
+                        try:
+                            pmap[str(getattr(p, "phone", "") or "")] = int(getattr(p, "id", 1) or 1)
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+                if pmap:
+                    rows = db.query(ChatMessage).filter(
+                        (ChatMessage.owner_id.is_(None)) | (ChatMessage.owner_id == 1)).all()
+                    changed = False
+                    for m in rows:
+                        try:
+                            sp = "".join(ch for ch in str(getattr(m, "session_phone", "") or "") if ch.isdigit())
+                            hit = None
+                            for ph, oid in pmap.items():
+                                if sp and (sp == ph or sp.endswith(ph) or ph.endswith(sp)):
+                                    hit = oid
+                                    break
+                            if hit and int(getattr(m, "owner_id", 1) or 1) != hit:
+                                m.owner_id = hit
+                                changed = True
+                        except Exception:
+                            continue
+                    if changed:
+                        db.commit()
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def ensure_prod_schema() -> None:
     """Production indexes for Postgres (idempotent, PG-only, never raises).
 

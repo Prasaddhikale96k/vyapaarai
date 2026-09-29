@@ -27,10 +27,12 @@ export function MessageBubble({
   role,
   content,
   time,
+  source,
 }: {
   role: "user" | "ai";
   content: string;
   time: Date;
+  source?: "web" | "whatsapp";
 }) {
   const isUser = role === "user";
   return (
@@ -64,7 +66,7 @@ export function MessageBubble({
       >
         <div>{renderLite(content)}</div>
         <p className="mt-1 text-right text-[10px]" style={{ color: isUser ? "rgba(255,255,255,.7)" : "var(--ink-faint)" }}>
-          {fmtClock(time)} {isUser ? "✓✓" : ""}
+          {source === "whatsapp" ? "📲 " : source === "web" ? "🌐 " : ""}{fmtClock(time)} {isUser ? "✓✓" : ""}
         </p>
       </div>
     </motion.div>

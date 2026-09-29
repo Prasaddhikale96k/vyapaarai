@@ -196,6 +196,8 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_phone = Column(String(32), index=True, nullable=False)
+    owner_id = Column(Integer, default=1, index=True, nullable=False)
+    source = Column(String(8), default="web", nullable=False)  # web|whatsapp
     role = Column(String(16), nullable=False)
     content = Column(Text, nullable=False)
     language = Column(String(8), nullable=True)

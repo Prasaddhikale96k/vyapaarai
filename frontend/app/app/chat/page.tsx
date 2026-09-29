@@ -9,6 +9,7 @@ import { MessageBubble } from "@/components/chat/message-bubble";
 import { SuggestedChips } from "@/components/chat/suggested-chips";
 import { FadeIn } from "@/components/fade-in";
 import { apiFetch, fmtClock, type AgentStep, type ChatResp } from "@/lib/api";
+import { useRealtime } from "@/lib/realtime";
 
 interface Msg {
   id: number;
@@ -17,6 +18,15 @@ interface Msg {
   time: Date;
   steps?: AgentStep[];
   provider?: string;
+  source?: "web" | "whatsapp";
+}
+
+interface HistoryRow {
+  id: number;
+  role: string;
+  content: string;
+  source: string;
+  created_at: string | null;
 }
 
 const STATUS_STEPS = [
@@ -57,6 +67,33 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, waiting]);
+
+  // Unified thread: server truth replaces local list (no dupes, ever)
+  const loadHistory = async () => {
+    try {
+      const rows = await apiFetch<HistoryRow[]>("/chat/history");
+      if (!Array.isArray(rows)) return;
+      setMessages(
+        rows.map((r) => ({
+          id: -(r.id ?? 0) - 1, // negative: never collides with local counter
+          role: r.role === "assistant" ? ("ai" as const) : ("user" as const),
+          content: r.content ?? "",
+          time: r.created_at ? new Date(r.created_at) : new Date(),
+          source: r.source === "whatsapp" ? ("whatsapp" as const) : ("web" as const),
+        }))
+      );
+    } catch {
+      /* offline/history empty — local thread continues */
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  useRealtime(["chat_messages"], () => {
+    loadHistory();
+  });
 
   useEffect(() => {
     if (!waiting) return;
@@ -261,7 +298,7 @@ export default function ChatPage() {
         )}
 
         {messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role} content={m.content} time={m.time} />
+          <MessageBubble key={m.id} role={m.role} content={m.content} time={m.time} source={m.source} />
         ))}
 
         <AnimatePresence>

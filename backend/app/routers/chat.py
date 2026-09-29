@@ -21,6 +21,51 @@ class ChatRequest(BaseModel):
     phone: Optional[str] = "web"
 
 
+@router.get("/chat/history")
+def chat_history(db: Session = Depends(get_db), owner=Depends(get_optional_owner)):
+    """Unified thread: owner_id match OR session_phone match, oldest first. Max 100."""
+    from app.models import ChatMessage
+
+    oid = owner_id_of(owner)
+    try:
+        own_phone = str(getattr(owner, "phone", "") or "").strip() if owner is not None else ""
+    except Exception:
+        own_phone = ""
+    try:
+        filt = [ChatMessage.owner_id == oid]
+        if own_phone:
+            digits = "".join(ch for ch in own_phone if ch.isdigit())
+            if digits:
+                filt.append(ChatMessage.session_phone == digits)
+                filt.append(ChatMessage.session_phone == own_phone)
+        from sqlalchemy import or_ as _or
+
+        rows = (
+            db.query(ChatMessage)
+            .filter(_or(*filt))
+            .order_by(ChatMessage.id.asc())
+            .limit(100)
+            .all()
+        )
+    except Exception:
+        rows = []
+    out = []
+    for m in rows:
+        try:
+            created = m.created_at.isoformat() if getattr(m, "created_at", None) else None
+        except Exception:
+            created = str(getattr(m, "created_at", None))
+        out.append({
+            "id": getattr(m, "id", None),
+            "role": getattr(m, "role", "user"),
+            "content": getattr(m, "content", "") or "",
+            "language": getattr(m, "language", "") or "",
+            "source": getattr(m, "source", "web") or "web",
+            "created_at": created,
+        })
+    return out
+
+
 @router.post("/chat")
 @limiter.limit("30/minute")
 def chat(request: Request, req: ChatRequest, db: Session = Depends(get_db), owner=Depends(get_optional_owner)):

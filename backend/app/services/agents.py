@@ -512,7 +512,8 @@ def _prefetch_context_block(owner_id=None) -> str:
         return f"Context unavailable: {exc}"
 
 
-def orchestrate(question: str, phone: str = "web", owner_id: int = 1) -> dict:
+def orchestrate(question: str, phone: str = "web", owner_id: int = 1,
+                source: str = "web") -> dict:
     from app.services import llm as llm_mod
 
     q = str(question or "").strip()
@@ -614,20 +615,26 @@ def orchestrate(question: str, phone: str = "web", owner_id: int = 1) -> dict:
 
     lang = detect_language(q)
 
-    # 4. Persist ChatMessage rows
+    # 4. Persist ChatMessage rows (one-shot P3: owner_id + source thread)
+    # WA path persists the assistant reply via _reply(); only the user row here.
     try:
         from app.db import SessionLocal
         from app.models import ChatMessage
 
+        src = str(source or "web").strip().lower() or "web"
+        if src not in ("web", "whatsapp"):
+            src = "web"
         db = SessionLocal()
         try:
-            db.add(ChatMessage(session_phone=phone, role="user", content=q, language=lang))
-            db.add(
-                ChatMessage(
-                    session_phone=phone, role="assistant", content=answer,
-                    language=lang, steps=json.dumps(steps, default=str),
+            db.add(ChatMessage(session_phone=phone, owner_id=oid, role="user",
+                               content=q, language=lang, source=src))
+            if src != "whatsapp":
+                db.add(
+                    ChatMessage(
+                        session_phone=phone, owner_id=oid, role="assistant", content=answer,
+                        language=lang, steps=json.dumps(steps, default=str), source=src,
+                    )
                 )
-            )
             db.commit()
         finally:
             try:
