@@ -265,12 +265,63 @@ def startup_scan(owner_id: int = 1) -> list:
 
 
 def morning_brief_placeholder() -> None:
+    """08:00 job: brief to every allowed owner + one-time nudge if activated but
+    never onboarded (account older than 20h, nudge not yet sent). Never raises."""
     try:
+        from datetime import datetime, timedelta
+
+        from app.db import SessionLocal, ensure_p15_schema
+        from app.models import OwnerProfile
+        from app.services import notify
         from app.services.whatsapp_flow import build_and_send_brief
         import json
 
-        result = build_and_send_brief()
-        logger.info("morning brief: %s", json.dumps(result.get("items", []), ensure_ascii=False))
+        try:
+            ensure_p15_schema()
+        except Exception:
+            pass
+        db = SessionLocal()
+        try:
+            owners = db.query(OwnerProfile).filter(OwnerProfile.allowed.is_(True)).all()
+            for prof in owners:
+                try:
+                    oid = int(getattr(prof, "id", 0) or 0)
+                    phone = str(getattr(prof, "phone", "") or "")
+                    onboarded = bool(getattr(prof, "onboarded", False))
+                    nudge_at = getattr(prof, "nudge_sent_at", None)
+                    try:
+                        created = getattr(prof, "created_at", None)
+                        age_h = ((datetime.utcnow() - created).total_seconds() / 3600
+                                 if created else 999.0)
+                    except Exception:
+                        age_h = 999.0
+                    if not onboarded and nudge_at is None and age_h >= 20 and phone:
+                        res = notify.send_text(
+                            phone,
+                            "🙏 VyapaarAI me swagat! Pehli entry bhejo — stock list ki photo, ya seedha likh do. Main likh lunga!",
+                        )
+                        if isinstance(res, dict) and not res.get("simulated", True):
+                            try:
+                                prof.nudge_sent_at = datetime.utcnow()
+                                db.commit()
+                            except Exception:
+                                try:
+                                    db.rollback()
+                                except Exception:
+                                    pass
+                        logger.info("morning nudge owner=%d", oid)
+                        continue
+                    result = build_and_send_brief(owner=prof)
+                    logger.info("morning brief owner=%d: %s", oid,
+                                json.dumps(result.get("items", []), ensure_ascii=False))
+                except Exception as exc:
+                    logger.warning("morning brief owner failed: %s", str(exc)[:200])
+                    continue
+        finally:
+            try:
+                db.close()
+            except Exception:
+                pass
     except Exception as exc:
         logger.warning("morning brief failed: %s", exc)
 

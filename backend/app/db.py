@@ -171,6 +171,7 @@ def ensure_p4_schema() -> None:
 
 def ensure_p15_schema() -> None:
     """P15: owner_profiles.business_type + distributors (JSON array of phones).
+    One-shot P1: + nudge_sent_at (one-time morning nudge stamp).
 
     Additive + non-destructive, idempotent, sqlite+PG safe, never raises.
     Backfill: distributors from existing distributor_phone; distributor_phone
@@ -187,6 +188,7 @@ def ensure_p15_schema() -> None:
         prof_cols = {
             "business_type": "VARCHAR(32)",
             "distributors": "TEXT",
+            "nudge_sent_at": "TIMESTAMP",
         }
         with engine.connect() as conn:
             if is_sqlite:

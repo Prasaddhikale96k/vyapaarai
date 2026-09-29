@@ -149,7 +149,7 @@ export default function RegisterPage() {
         method: "POST",
         body: JSON.stringify(form),
       });
-      setDone(r.message || "⏳ Admin approval ke baad login karein");
+      setDone(r.message || "✅ Number note ho gaya — ab Login par OTP verify karo");
       toast.success("Request mil gayi ✅");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Register nahi ho paya";
@@ -184,7 +184,7 @@ export default function RegisterPage() {
             <>
               <div>
                 <h1 className="font-display text-2xl font-bold">Dukaan register karo 📝</h1>
-                <p className="card-sub mt-1">WhatsApp nahi? Yahan se — admin approve karega.</p>
+                <p className="card-sub mt-1">WhatsApp nahi? Yahan se — OTP verify karte hi shuru.</p>
               </div>
 
               <div>
@@ -269,11 +269,11 @@ export default function RegisterPage() {
           ) : (
             <div className="flex flex-col items-center py-4 text-center">
               <Hourglass />
-              <h2 className="font-display mt-3 text-xl font-bold">Request mil gayi! ⏳</h2>
+              <h2 className="font-display mt-3 text-xl font-bold">Number note ho gaya! ✅</h2>
               <p className="card-sub mt-1">{done}</p>
               <div className="mt-3 w-full space-y-1.5 text-left text-sm">
-                <p className="flex items-start gap-2"><span>1️⃣</span> Admin approve karega</p>
-                <p className="flex items-start gap-2"><span>2️⃣</span> WhatsApp par OTP aayega (assistant number se)</p>
+                <p className="flex items-start gap-2"><span>1️⃣</span> Login page par OTP verify karo</p>
+                <p className="flex items-start gap-2"><span>2️⃣</span> Account turant active — koi wait nahi</p>
                 <p className="flex items-start gap-2"><span>3️⃣</span> Data WhatsApp par bhej dijiye — bas!</p>
               </div>
               <Link href="/login" className="btn-ghost mt-4 inline-block" style={{ textDecoration: "none" }}>

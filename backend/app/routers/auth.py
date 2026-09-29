@@ -190,11 +190,15 @@ def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)
     phone = _digits(req.phone)
     if len(phone) < 10:
         raise HTTPException(status_code=422, detail="Sahi phone number bhejo")
-    prof = db.query(OwnerProfile).filter(OwnerProfile.phone == phone).first()
-    if prof is None or not bool(getattr(prof, "allowed", False)):
+    prof = _find_profile_by_phone(db, req.phone)
+    if prof is not None:
+        phone = str(getattr(prof, "phone", "") or "") or phone
+    if prof is None:
+        # one-shot P1: OTP = onboarding — unknown number gets honest 403, but
+        # an existing (even inactive) profile may always request an OTP
         raise HTTPException(
             status_code=403,
-            detail="Ye number registered nahi hai — pehle WhatsApp par register karein",
+            detail="Ye number registered nahi hai — pehle /register karo ya WhatsApp par 'hi' bhejo",
         )
     code = "%06d" % random.randint(0, 999999)
     try:
@@ -226,8 +230,10 @@ def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
     from app.models import OwnerProfile
 
     phone = _digits(req.phone)
-    prof = db.query(OwnerProfile).filter(OwnerProfile.phone == phone).first()
-    if prof is None or not bool(getattr(prof, "allowed", False)):
+    prof = _find_profile_by_phone(db, req.phone)
+    if prof is not None:
+        phone = str(getattr(prof, "phone", "") or "") or phone
+    if prof is None:
         raise HTTPException(status_code=401, detail="Galat number ya OTP")
     try:
         exp = getattr(prof, "otp_expires_at", None)
@@ -243,14 +249,39 @@ def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
     )
     if not ok:
         raise HTTPException(status_code=401, detail="Galat ya expire OTP")
+    # one-shot P1: OTP verify = onboarding — inactive profile activates HERE
+    activated = False
     try:
         prof.otp_code = None
         prof.otp_expires_at = None
         prof.otp_attempts = 0
+        if not bool(getattr(prof, "allowed", False)):
+            prof.allowed = True
+            try:
+                prof.reg_step = None
+            except Exception:
+                pass
+            activated = True
         db.commit()
     except Exception:
         try:
             db.rollback()
+        except Exception:
+            pass
+    if activated:
+        try:
+            from app.services import notify as _notify
+
+            _notify.send_text(
+                phone,
+                "🎉 Account ACTIVE! Ab photo/voice/CSV bhejiye — main likh lunga. Pehli entry bhejo aur shuru karo!",
+            )
+        except Exception:
+            pass
+        try:
+            from app.services import owners as _owners
+
+            _owners._notify_admin_new_registration(prof, note="OTP-active (ops info)")
         except Exception:
             pass
     secret = _jwt_secret()
@@ -263,7 +294,7 @@ def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
         algorithm="HS256",
     )
     admin = is_admin_owner(prof)
-    return {"token": token, "owner": _owner_to_dict(prof, admin)}
+    return {"token": token, "owner": _owner_to_dict(prof, admin), "activated": activated}
 
 
 def _norm_phone(raw) -> str:
@@ -274,10 +305,33 @@ def _norm_phone(raw) -> str:
     return d
 
 
+def _phone_candidates(raw) -> list:
+    """All stored-form variants of a typed phone (register stores stripped form)."""
+    d = _digits(raw)
+    stripped = d[2:] if len(d) > 10 and d.startswith("91") else d
+    cands = [d]
+    if stripped not in cands:
+        cands.append(stripped)
+    if len(stripped) == 10 and ("91" + stripped) not in cands:
+        cands.append("91" + stripped)
+    return cands
+
+
+def _find_profile_by_phone(db, raw):
+    """Find OwnerProfile by any phone variant. None if no match."""
+    from app.models import OwnerProfile
+
+    try:
+        return db.query(OwnerProfile).filter(
+            OwnerProfile.phone.in_(_phone_candidates(raw))).first()
+    except Exception:
+        return None
+
+
 @router.post("/auth/register")
 @limiter.limit("10/minute")
 def web_register(request: Request, req: RegisterRequest, db: Session = Depends(get_db)):
-    """Web registration (no WhatsApp needed). Always pending until admin approves."""
+    """Web registration: creates inactive profile — OTP verify activates it (no admin gate)."""
     from app.models import OwnerProfile
 
     d = _digits(req.phone)
@@ -294,7 +348,7 @@ def web_register(request: Request, req: RegisterRequest, db: Session = Depends(g
         raise HTTPException(status_code=409, detail="Already registered — login karo")
     if prof is not None:
         return {"status": "pending",
-                "message": "⏳ Aapka account approval pending hai — admin approve karega 🙏"}
+                "message": "⏳ Number mil gaya — ab OTP verify karo aur shuru karo ✅"}
     # P15: business_type enum validation (11 categories)
     from app.services.owners import BUSINESS_TYPE_CODES, MAX_DISTRIBUTORS
 
@@ -354,7 +408,7 @@ def web_register(request: Request, req: RegisterRequest, db: Session = Depends(g
     except Exception:
         pass
     return {"status": "pending",
-            "message": "⏳ Admin approval ke baad login karein"}
+            "message": "✅ Number note ho gaya — ab Login par OTP verify karo aur shuru karo"}
 
 
 @router.get("/distributors/lookup")

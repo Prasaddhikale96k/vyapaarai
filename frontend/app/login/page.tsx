@@ -38,7 +38,7 @@ export default function LoginPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "OTP nahi bheja gaya";
       if (/pending|register/i.test(msg)) {
-        setPendingNote("⏳ Approval pending hai — admin approve karega, phir login karo 🙏");
+        setPendingNote("⏳ Number registered nahi — pehle /register karo ya WhatsApp par 'hi' bhejo 🙏");
       }
       toast.error(msg);
     } finally {

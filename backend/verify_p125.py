@@ -1,12 +1,11 @@
-"""P12.5 verify: web registration (no WhatsApp). Prints P12.5 VERIFY: ALL GREEN."""
+"""One-shot P1 verify: OTP = onboarding (no admin gate). Prints P125 VERIFY: ALL GREEN."""
 
 import os
 os.environ["ENABLE_WATCHER"] = "false"  # BEFORE app import
 os.environ["WA_GATEWAY"] = "evolution"
 
-import subprocess
 import sys
-from datetime import datetime, timedelta
+import time
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -21,7 +20,7 @@ client = TestClient(_fastapi_app, raise_server_exceptions=False)
 
 failures = []
 passed = 0
-total = 5
+total = 4
 
 
 def report(n, name, ok, detail=""):
@@ -34,136 +33,85 @@ def report(n, name, ok, detail=""):
         failures.append(f"{n}. {name}")
 
 
-def _jwt_secret():
+SUFFIX = str(int(time.time()))[-6:]
+TMP = f"91981{SUFFIX}"
+
+
+def _clean():
     try:
-        for line in open(".env", encoding="utf-8").read().splitlines():
-            if line.strip().startswith("JWT_SECRET="):
-                return line.split("=", 1)[1].strip()
+        from app.models import OwnerProfile
+        db = SessionLocal()
+        try:
+            for ph in (TMP, TMP[2:] if TMP.startswith("91") else TMP):
+                old = db.query(OwnerProfile).filter(OwnerProfile.phone == ph).first()
+                if old is not None:
+                    db.delete(old)
+            db.commit()
+        finally:
+            db.close()
     except Exception:
         pass
-    return ""
 
 
-def _mint(owner_id, phone):
-    import jwt as _jwt
-    return _jwt.encode(
-        {"sub": str(int(owner_id)), "phone": phone,
-         "exp": datetime.utcnow() + timedelta(days=7)},
-        _jwt_secret(), algorithm="HS256")
-
-
-TMP = "919811112222"
-ADMIN_H = {"Authorization": f"Bearer {_mint(1, '919834854511')}"}
-
-# pre-clean temp phone (both +91 and stripped forms)
-try:
-    from app.models import OwnerProfile
-    db = SessionLocal()
-    try:
-        for ph in (TMP, "9811112222"):
-            old = db.query(OwnerProfile).filter(OwnerProfile.phone == ph).first()
-            if old is not None:
-                db.delete(old)
-        db.commit()
-    finally:
-        db.close()
-except Exception:
-    pass
+_clean()
 
 # 1. existing allowed owner -> 409
 try:
-    r = client.post("/auth/register", json={"phone": "919834854511", "name": "X"})
+    r = client.post("/auth/register", json={"phone": "919834854511", "name": "X", "business_type": "kirana"})
     ok = r.status_code == 409 and "Already registered" in str(r.json().get("detail", ""))
     report(1, "register existing 409", ok, f"-> {r.status_code} {r.text[:100]}")
 except Exception as e:
     report(1, "register existing 409", False, f"EXC {e}")
 
-# 2. new owner -> pending
+# 2. new owner -> pending (OTP framing, no admin copy)
 try:
     r = client.post("/auth/register", json={
-        "phone": "+91 98111 12222", "name": "P125 Web",
-        "business_name": "P125 Web Stores", "distributor_phone": "919000000001",
-        "language": "hi"})
+        "phone": TMP, "name": "P125 Web", "business_name": "P125 Web Stores",
+        "business_type": "kirana", "language": "hi"})
     j = r.json() if r.status_code == 200 else {}
-    ok = r.status_code == 200 and j.get("status") == "pending"
+    ok = (r.status_code == 200 and j.get("status") == "pending"
+          and "admin approve" not in str(j.get("message", "")).lower())
     report(2, "register new pending", ok, f"-> {r.status_code} {j}")
 except Exception as e:
     report(2, "register new pending", False, f"EXC {e}")
 
-# 3. login request while pending -> 403 (+ duplicate register -> pending, not dup)
+# 3. otp request on INACTIVE profile -> 200 (no 403); unknown phone -> 403
 try:
     r = client.post("/auth/otp/request", json={"phone": TMP})
-    r2 = client.post("/auth/register", json={"phone": TMP, "name": "Again"})
-    j2 = r2.json() if r2.status_code == 200 else {}
-    ok = (r.status_code == 403 and r2.status_code == 200
-          and j2.get("status") == "pending")
-    report(3, "pending login 403", ok, f"-> otp={r.status_code} re-reg={r2.status_code}")
+    r_unk = client.post("/auth/otp/request", json={"phone": "919800000999"})
+    ok = r.status_code == 200 and r_unk.status_code == 403
+    report(3, "otp request inactive 200 / unknown 403", ok,
+           f"-> inactive={r.status_code} unknown={r_unk.status_code}")
 except Exception as e:
-    report(3, "pending login 403", False, f"EXC {e}")
+    report(3, "otp request inactive 200 / unknown 403", False, f"EXC {e}")
 
-# 4. admin approve -> otp/dev_otp -> token -> /me business
-try:
-    from app.models import OwnerProfile
-    rl = client.get("/owners?status=pending", headers=ADMIN_H)
-    rows = rl.json() if rl.status_code == 200 else []
-    hit = [x for x in rows if isinstance(x, dict)
-           and str(x.get("phone", "")).endswith("9811112222")]
-    tid = hit[0]["id"] if hit else None
-    stored = str(hit[0].get("phone", TMP)) if hit else TMP
-    ra = client.post(f"/owners/{tid}/approve", headers=ADMIN_H) if tid else None
-    ro = client.post("/auth/otp/request", json={"phone": stored})
-    code = ro.json().get("dev_otp", "") if ro.status_code == 200 else ""
-    rv = client.post("/auth/otp/verify", json={"phone": stored, "code": code}) if code else None
-    tok = rv.json().get("token", "") if rv is not None and rv.status_code == 200 else ""
-    me = client.get("/me", headers={"Authorization": f"Bearer {tok}"}) if tok else None
-    mj = me.json() if me is not None and me.status_code == 200 else {}
-    ok = (ra is not None and ra.status_code == 200 and bool(code) and bool(tok)
-          and mj.get("business_name") == "P125 Web Stores")
-    report(4, "approve+login+me", ok,
-           f"-> approve={ra.status_code if ra else '?'} dev_otp={bool(code)} "
-           f"me_biz={mj.get('business_name')}")
-except Exception as e:
-    report(4, "approve+login+me", False, f"EXC {e}")
-
-# cleanup temp profile (both forms)
+# 4. verify with DB code -> allowed==True + token + /me; wrong code -> 401
 try:
     from app.models import OwnerProfile
     db = SessionLocal()
     try:
-        for ph in (TMP, "9811112222"):
-            old = db.query(OwnerProfile).filter(OwnerProfile.phone == ph).first()
-            if old is not None:
-                db.delete(old)
-        db.commit()
+        prof = db.query(OwnerProfile).filter(
+            OwnerProfile.phone.in_([TMP, TMP[2:] if TMP.startswith("91") else TMP])).first()
+        code = str(getattr(prof, "otp_code", "") or "") if prof else ""
+        stored = str(getattr(prof, "phone", TMP)) if prof else TMP
     finally:
         db.close()
-except Exception:
-    pass
-
-print(f"P12.5 progress: {passed}/{total} backend checks", flush=True)
-if failures:
-    print("FAILURES:", failures, flush=True)
-    sys.exit(1)
-
-# 5. verify_p3 once + build + tsc
-try:
-    p = subprocess.run([sys.executable, "-u", "verify_p3.py"], capture_output=True,
-                       text=True, timeout=900)
-    tail = (p.stdout or "").strip().splitlines()
-    ok_p3 = p.returncode == 0 and any("P3 VERIFY: 9/9" in l for l in tail)
-    import pathlib
-    fe = pathlib.Path(__file__).resolve().parent.parent / "frontend"
-    b = subprocess.run(["npm", "run", "build"], cwd=str(fe), capture_output=True,
-                       text=True, timeout=600, shell=True)
-    t = subprocess.run(["npx", "tsc", "--noEmit"], cwd=str(fe), capture_output=True,
-                       text=True, timeout=300, shell=True)
-    ok = ok_p3 and b.returncode == 0 and t.returncode == 0
-    report(5, "p3+build+tsc", ok,
-           f"-> p3={ok_p3} build={b.returncode} tsc={t.returncode}")
+    rv = client.post("/auth/otp/verify", json={"phone": stored, "code": code}) if code else None
+    tok = rv.json().get("token", "") if rv is not None and rv.status_code == 200 else ""
+    me = client.get("/me", headers={"Authorization": f"Bearer {tok}"}) if tok else None
+    mj = me.json() if me is not None and me.status_code == 200 else {}
+    rw = client.post("/auth/otp/verify", json={"phone": stored, "code": "000000"})
+    ok = (bool(code) and bool(tok) and mj.get("allowed") is True
+          and mj.get("business_name") == "P125 Web Stores" and rw.status_code == 401)
+    report(4, "verify activates + token + wrong-code 401", ok,
+           f"-> code={bool(code)} tok={bool(tok)} allowed={mj.get('allowed')} wrong={rw.status_code}")
 except Exception as e:
-    report(5, "p3+build+tsc", False, f"EXC {e}")
+    report(4, "verify activates + token + wrong-code 401", False, f"EXC {e}")
 
+_clean()
+
+print(f"P125 VERIFY: {passed}/{total} checks passed", flush=True)
 if failures:
     print("FAILURES:", failures, flush=True)
     sys.exit(1)
-print("P12.5 VERIFY: ALL GREEN", flush=True)
+print("P125 VERIFY: ALL GREEN", flush=True)

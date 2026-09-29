@@ -186,6 +186,8 @@ class OwnerProfile(Base):
     # --- P15: business taxonomy + multi-distributor ---
     business_type = Column(String(32), nullable=True)
     distributors = Column(Text, nullable=True)  # JSON array of phone strings
+    # --- one-shot P1: one-time morning nudge for activated-but-not-onboarded ---
+    nudge_sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 

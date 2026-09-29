@@ -199,7 +199,11 @@ def _admin_phone() -> str:
     return _digits(raw)
 
 
-def _notify_admin_new_registration(profile) -> None:
+WELCOME_TEXT = "🎉 Account ACTIVE! Ab photo/voice/CSV bhejiye — main likh lunga. Pehli entry bhejo aur shuru karo!"
+
+
+def _notify_admin_new_registration(profile, note: str = "") -> None:
+    """One-shot P1: informational OPS ping only — no approval gate exists."""
     try:
         admin = _admin_phone()
         if not admin:
@@ -211,11 +215,11 @@ def _notify_admin_new_registration(profile) -> None:
             _ = _OP
         except Exception:
             pass
+        suffix = f" • {note}" if note else " (OTP pending)"
         text = (
             f"🆕 Nayi registration: {getattr(profile, 'name', '') or ''} "
             f"({getattr(profile, 'business_name', '') or ''}) • "
-            f"distributor: {getattr(profile, 'distributor_phone', '') or ''} • "
-            f"{getattr(profile, 'phone', '') or ''}. Approve: dashboard /admin"
+            f"{getattr(profile, 'phone', '') or ''}{suffix}"
         )
         try:
             from app.services import notify as _notify
@@ -356,7 +360,7 @@ def advance_registration(db, phone: str, text: str) -> dict:
 
 
 def verify_otp(db, phone: str, code: str) -> dict:
-    """OTP check: sahi → pending approval; galat/expire → error (3 attempts → restart)."""
+    """OTP check: sahi → ACTIVE immediately (OTP = onboarding); galat/expire → error (3 attempts → restart)."""
     try:
         phone = _digits(phone)
         prof = get_profile(db, phone)
@@ -400,20 +404,21 @@ def verify_otp(db, phone: str, code: str) -> dict:
                 return {"reply": f"{why} — dobara shuru karte hain. Apna NAAM bhejiye 🙏", "profile": prof}
             left = OTP_MAX_ATTEMPTS - attempts
             return {"reply": f"❌ Galat OTP. {left} chance bache hain — sahi code bhejiye.", "profile": prof}
-        # correct
+        # correct — activate immediately
         try:
             prof.reg_step = None
             prof.otp_code = None
             prof.otp_expires_at = None
             prof.otp_attempts = 0
+            prof.allowed = True
             if not getattr(prof, "language", None):
                 prof.language = "hi"
             _save(db)
         except Exception:
             pass
-        _notify_admin_new_registration(prof)
+        _notify_admin_new_registration(prof, note="OTP-active (ops info)")
         return {
-            "reply": "⏳ OTP verified! Admin approval ke baad aapka account live hoga.",
+            "reply": WELCOME_TEXT,
             "profile": prof,
         }
     except Exception as exc:
@@ -422,7 +427,7 @@ def verify_otp(db, phone: str, code: str) -> dict:
 
 
 def approve_owner(db, owner_id: int) -> dict:
-    """Admin approval: allowed=True + WhatsApp pe ACTIVE message. Hamesha dict."""
+    """Ops override restore: allowed=True + WhatsApp pe ACTIVE message. Hamesha dict."""
     try:
         from app.models import OwnerProfile
 
@@ -445,7 +450,7 @@ def approve_owner(db, owner_id: int) -> dict:
 
 
 def reject_owner(db, owner_id: int) -> dict:
-    """Admin rejection: allowed=False + polite WhatsApp message."""
+    """Ops override suspend: allowed=False + polite WhatsApp message."""
     try:
         from app.models import OwnerProfile
 
