@@ -102,11 +102,7 @@ _STEP_ASK = {
 }
 
 
-def _digits(text) -> str:
-    try:
-        return "".join(ch for ch in str(text or "") if ch.isdigit())
-    except Exception:
-        return ""
+from app.services.phone import normalize_phone as _digits  # single util (S8#25)
 
 
 def _norm_lang(text) -> str:
@@ -131,6 +127,17 @@ def _norm_lang(text) -> str:
     if len(t) <= 3 and t.isalpha():
         return t
     return "hi"
+
+
+def _bridge_label() -> str:
+    """Bridge/assistant number for user-facing messages — config read, never hardcoded."""
+    try:
+        from app import config as _cfg
+
+        raw = os.getenv("ASSISTANT_PHONE", "") or str(getattr(_cfg, "ASSISTANT_PHONE", "") or "")
+    except Exception:
+        raw = os.getenv("ASSISTANT_PHONE", "")
+    return _digits(raw) or "bridge"
 
 
 def _is_dev() -> bool:
@@ -341,7 +348,7 @@ def advance_registration(db, phone: str, text: str) -> dict:
                 reply = f"🔐 VyapaarAI OTP: {code}. Ise reply karke verify karein. (dev OTP: {code})"
             else:
                 # P15: production me OTP code WA reply me KABHI echo nahi hota
-                reply = "❌ OTP bheja nahi ja saka — WhatsApp bridge (919511996418) check karo, phir dobara try karein."
+                reply = f"❌ OTP bheja nahi ja saka — WhatsApp bridge ({_bridge_label()}) check karo, phir dobara try karein."
             return {"reply": reply, "profile": prof, "otp_sent": sent}
 
         if step == "OTP":

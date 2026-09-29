@@ -43,11 +43,7 @@ class RegisterRequest(BaseModel):
     language: Optional[str] = "hi"
 
 
-def _digits(text) -> str:
-    try:
-        return "".join(ch for ch in str(text or "") if ch.isdigit())
-    except Exception:
-        return ""
+from app.services.phone import normalize_phone as _digits  # single util (S8#25)
 
 
 def _jwt_secret() -> str:
@@ -68,6 +64,17 @@ def _admin_phone() -> str:
     except Exception:
         raw = os.getenv("ADMIN_PHONE", "")
     return _digits(raw)
+
+
+def _bridge_label() -> str:
+    """Bridge/assistant number for user-facing messages — config read, never hardcoded."""
+    try:
+        from app import config as _cfg
+
+        raw = os.getenv("ASSISTANT_PHONE", "") or str(getattr(_cfg, "ASSISTANT_PHONE", "") or "")
+    except Exception:
+        raw = os.getenv("ASSISTANT_PHONE", "")
+    return _digits(raw) or "bridge"
 
 
 def _is_dev() -> bool:
@@ -221,7 +228,7 @@ def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)
         else:
             # P15: production me dev_otp KABHI nahi — honest failure with message
             out["sent"] = False
-            out["error"] = "OTP WhatsApp par nahi bheja ja saka — bridge (919511996418) check karo"
+            out["error"] = f"OTP WhatsApp par nahi bheja ja saka — bridge ({_bridge_label()}) check karo"
     return out
 
 
@@ -297,35 +304,10 @@ def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
     return {"token": token, "owner": _owner_to_dict(prof, admin), "activated": activated}
 
 
-def _norm_phone(raw) -> str:
-    """Web normalization: digits only, strip leading 91 country code."""
-    d = _digits(raw)
-    if len(d) > 10 and d.startswith("91"):
-        d = d[2:]
-    return d
-
-
-def _phone_candidates(raw) -> list:
-    """All stored-form variants of a typed phone (register stores stripped form)."""
-    d = _digits(raw)
-    stripped = d[2:] if len(d) > 10 and d.startswith("91") else d
-    cands = [d]
-    if stripped not in cands:
-        cands.append(stripped)
-    if len(stripped) == 10 and ("91" + stripped) not in cands:
-        cands.append("91" + stripped)
-    return cands
-
-
-def _find_profile_by_phone(db, raw):
-    """Find OwnerProfile by any phone variant. None if no match."""
-    from app.models import OwnerProfile
-
-    try:
-        return db.query(OwnerProfile).filter(
-            OwnerProfile.phone.in_(_phone_candidates(raw))).first()
-    except Exception:
-        return None
+from app.services.phone import (  # single util (S8#25)
+    find_profile_by_phone as _find_profile_by_phone,
+    phone_candidates as _phone_candidates,
+)
 
 
 @router.post("/auth/register")
