@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import Response as FastAPIResponse
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.routers.auth import get_optional_owner, owner_id_of
+from app.limits import limiter
+from app.routers.auth import get_current_owner, get_optional_owner, owner_id_of
 from app.services import intelligence as eng
 
 router = APIRouter(tags=["intelligence"])
@@ -104,3 +106,21 @@ def get_credit_score(response: Response, db: Session = Depends(get_db),
     oid = owner_id_of(owner)
     return _cached(f"credit-score|{oid}",
                    lambda: cred.credit_score(db, owner_id=oid), response)
+
+
+@router.get("/credit-score/report")
+@limiter.limit("20/minute")
+def get_credit_report(request: Request, db: Session = Depends(get_db),
+                      owner=Depends(get_current_owner)):
+    """P8-F1: bank-ready loan file (PDF). JWT owner-scoped. Never crashes."""
+    from datetime import date as _date
+
+    from app.services import reports as _reports
+
+    try:
+        pdf = _reports.build_credit_pdf(db, owner_id=owner_id_of(owner))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Report nahi bani: {str(exc)[:150]}")
+    fname = f"credit-report-{_date.today().isoformat()}.pdf"
+    return FastAPIResponse(content=pdf, media_type="application/pdf",
+                           headers={"Content-Disposition": f'attachment; filename="{fname}"'})

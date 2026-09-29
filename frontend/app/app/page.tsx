@@ -301,8 +301,27 @@ export default function Dashboard() {
     }
   };
 
-  const sendWa = async () => {
-    setSending(true);
+  const downloadCreditPdf = async () => {
+    try {
+      const tok = getToken();
+      const res = await fetch(`${API_URL}/credit-score/report`, {
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+      });
+      if (!res.ok) throw new Error(`Credit report nahi mili (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `credit-report-${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Bank-ready PDF download ho gayi 🏦");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Download fail ho gaya");
+    }
+  };
+
+  const sendWa = async () => {    setSending(true);
     try {
       const r = await apiFetch<{ simulated?: boolean }>("/reports/send-now", {
         method: "POST",
@@ -453,7 +472,10 @@ export default function Dashboard() {
           <span className="watermark-char">ऋ</span>
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="card-title font-display">Business credit score</h3>
-            <Button variant="outline" onClick={copyBankSummary} className="ml-auto">
+            <Button variant="outline" onClick={downloadCreditPdf} className="ml-auto">
+              🏦 Bank-ready PDF
+            </Button>
+            <Button variant="outline" onClick={copyBankSummary}>
               📋 Copy bank summary
             </Button>
           </div>
