@@ -65,15 +65,20 @@ def looks_like_scheme(text: str) -> bool:
         return False
 
 
+_UNIT_TOKENS = {"kg", "gm", "g", "ml", "ltr", "l", "pcs", "pc", "pack",
+                "pkt", "packet", "bottle", "tin", "box", "pouch", "sachet"}
+
+
 def _clean_product(raw: str) -> str:
     try:
         # symbols/digits stripped WITHOUT IGNORECASE (else R/S classes eat letters)
         s = re.sub(r"[₹\d+\-/,.:()]+", " ", str(raw or ""))
         s = re.sub(
-            r"\b(rs|inr|free|scheme|offer|muft|discount|till|tak|valid|price|mrp|rate|walla|wala)\b",
+            r"\b(rs|inr|free|scheme|offer|muft|discount|till|tak|valid|price|mrp|rate|walla|wala|mein|main|par|ke|ka|ki)\b",
             " ", s, flags=re.IGNORECASE)
-        s = re.sub(r"\s+", " ", s).strip(" -:.,")
-        return s[:64]
+        toks = [t for t in re.sub(r"\s+", " ", s).strip(" -:.,").split(" ")
+                if t and t.lower() not in _UNIT_TOKENS]
+        return " ".join(toks)[:64]
     except Exception:
         return ""
 
@@ -167,9 +172,18 @@ def match_product(db, owner_id: int, name: str):
 
         def _norm(s: str) -> str:
             try:
-                return re.sub(r"[^a-z0-9]+", "", str(s or "").lower())
+                toks = [t for t in re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).split()
+                        if t and t not in _UNIT_TOKENS]
+                return "".join(toks)
             except Exception:
                 return ""
+
+        def _tokens(s: str) -> set:
+            try:
+                return {t for t in re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).split()
+                        if t and t not in _UNIT_TOKENS and len(t) > 1}
+            except Exception:
+                return set()
 
         qn = _norm(q)
         if not qn:
@@ -188,6 +202,11 @@ def match_product(db, owner_id: int, name: str):
                     scored.append((len(nmn), p))
                 elif q in nm or nm in q or (sku and (q in sku or sku in q)):
                     scored.append((len(nm), p))
+                    continue
+                # token overlap: all query tokens inside name tokens (unit-agnostic)
+                qt, nt = _tokens(q), _tokens(nm)
+                if qt and qt <= nt:
+                    scored.append((len(nmn), p))
             except Exception:
                 continue
         if len(scored) == 1:
