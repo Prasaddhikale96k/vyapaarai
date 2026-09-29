@@ -111,6 +111,38 @@ def _transcribe_file(path: str, model):
     return " ".join(parts).strip(), lang, dur
 
 
+def _write_temp(data: bytes, suffix: str) -> str:
+    """Windows-safe temp file: mkstemp + close BEFORE handing the path out.
+
+    Root cause of dead voice on Windows: NamedTemporaryFile(delete=True)
+    holds an exclusive handle, so PyAV/ffmpeg/edge-tts cannot reopen the
+    same path -> PermissionError. Caller must os.unlink when done.
+    """
+    import os as _os
+
+    fd, path = tempfile.mkstemp(suffix=str(suffix or ".bin"))
+    try:
+        with open(fd, "wb") as f:
+            f.write(bytes(data or b""))
+    except Exception:
+        try:
+            _os.close(fd)
+        except Exception:
+            pass
+        raise
+    return path
+
+
+def _drop_temp(path: str) -> None:
+    try:
+        import os as _os
+
+        if path:
+            _os.unlink(path)
+    except Exception:
+        pass
+
+
 def _wav_via_pydub(raw: bytes) -> bytes | None:
     """Decode-anything -> wav bytes (ffmpeg backend). None when unavailable."""
     try:
@@ -150,22 +182,27 @@ def stt(audio_bytes: bytes, suffix: str = ".ogg") -> dict:
             suf = "." + suf
         text, lang, dur = "", "hi", None
         try:
-            with tempfile.NamedTemporaryFile(suffix=suf, delete=True) as tmp:
-                tmp.write(raw)
-                tmp.flush()
-                text, lang, dur = _transcribe_file(tmp.name, model)
+            _tmp = _write_temp(raw, suf)
+            try:
+                text, lang, dur = _transcribe_file(_tmp, model)
+            finally:
+                _drop_temp(_tmp)
         except Exception as exc:
             msg = str(exc)[:300]
-            # PyAV/ogg decode failures -> one pydub->wav retry (hardens WhatsApp .ogg too)
+            # PyAV/ogg decode failures -> one pydub->wav retry (hardens WhatsApp .ogg too).
+            # Layer-2: permission-denied also retries (Windows lock regressions can't kill voice).
             retried, wav = False, None
-            if any(k in msg.lower() for k in ("av", "decode", "ffmpeg", "moov", "ebml", "ogg", "webm")):
+            if any(k in msg.lower() for k in ("av", "decode", "ffmpeg", "moov", "ebml",
+                                              "ogg", "webm", "permission", "denied",
+                                              "winerror", "being used")):
                 wav = _wav_via_pydub(raw)
             if wav:
                 try:
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp2:
-                        tmp2.write(wav)
-                        tmp2.flush()
-                        text, lang, dur = _transcribe_file(tmp2.name, model)
+                    _tmp2 = _write_temp(wav, ".wav")
+                    try:
+                        text, lang, dur = _transcribe_file(_tmp2, model)
+                    finally:
+                        _drop_temp(_tmp2)
                     retried = True
                 except Exception as exc2:
                     msg = str(exc2)[:300]
@@ -202,10 +239,13 @@ def tts(text: str, language: str | None = None) -> bytes | None:
             import edge_tts
 
             communicate = edge_tts.Communicate(body[:2000], voice)
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=True) as tmp:
-                await communicate.save(tmp.name)
-                tmp.seek(0)
-                return tmp.read()
+            _tmp3 = _write_temp(b"", ".mp3")
+            try:
+                await communicate.save(_tmp3)
+                with open(_tmp3, "rb") as f:
+                    return f.read()
+            finally:
+                _drop_temp(_tmp3)
 
         try:
             return asyncio.run(_run())
