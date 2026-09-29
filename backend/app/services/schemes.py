@@ -160,7 +160,10 @@ def extract_scheme(text: str) -> dict | None:
 
 
 def match_product(db, owner_id: int, name: str):
-    """Fuzzy product match (name/sku substring both directions). None if ambiguous/absent."""
+    """Fuzzy product match. Exact/normalized-exact wins instantly; otherwise
+    best token-overlap wins ONLY on a strict margin (tie -> None = ask owner).
+    Size tokens (5kg/10kg) participate, so 'Atta 5kg' beats 'Atta 10kg'.
+    None if no usable overlap. Never raises."""
     try:
         from app.models import Product
 
@@ -188,29 +191,31 @@ def match_product(db, owner_id: int, name: str):
         qn = _norm(q)
         if not qn:
             return None
-        scored = []
-        for p in rows:
+        for p in rows:  # fast path: exact
             try:
                 nm = str(getattr(p, "name", "") or "").lower()
                 sku = str(getattr(p, "sku", "") or "").lower()
-                if not nm:
-                    continue
-                if q == nm or q == sku or qn == _norm(nm) or (sku and qn == _norm(sku)):
+                if q == nm or q == sku or (qn and (qn == _norm(nm) or (sku and qn == _norm(sku)))):
                     return p
-                nmn, skun = _norm(nm), _norm(sku)
-                if (nmn and (qn in nmn or nmn in qn)) or (skun and (qn in skun or skun in qn)):
-                    scored.append((len(nmn), p))
-                elif q in nm or nm in q or (sku and (q in sku or sku in q)):
-                    scored.append((len(nm), p))
-                    continue
-                # token overlap: all query tokens inside name tokens (unit-agnostic)
-                qt, nt = _tokens(q), _tokens(nm)
-                if qt and qt <= nt:
-                    scored.append((len(nmn), p))
             except Exception:
                 continue
-        if len(scored) == 1:
-            return scored[0][1]
+        qt = _tokens(q)
+        if not qt:
+            return None
+        ranked = []
+        for p in rows:  # overlap rank (message size tokens disambiguate packs)
+            try:
+                nt = _tokens(getattr(p, "name", "") or "") | _tokens(getattr(p, "sku", "") or "")
+                overlap = len(qt & nt)
+                if overlap > 0:
+                    ranked.append((overlap, len(nt), p))
+            except Exception:
+                continue
+        if not ranked:
+            return None
+        ranked.sort(key=lambda r: (r[0], -r[1]), reverse=True)
+        if len(ranked) == 1 or ranked[0][0] > ranked[1][0]:
+            return ranked[0][2]
         return None
     except Exception:
         return None
@@ -241,13 +246,17 @@ def stock_days(db, owner_id: int, product) -> float | None:
         return None
 
 
-def evaluate(db, owner_id: int, parsed: dict) -> dict:
-    """Compare effective unit price vs purchase_price + stock-days verdict."""
+def evaluate(db, owner_id: int, parsed: dict, raw_text: str = "") -> dict:
+    """Compare effective unit price vs purchase_price + stock-days verdict.
+
+    raw_text (original message) joins matching so size tokens the cleaner
+    stripped ("5kg") still disambiguate packs."""
     out = {"parsed": parsed, "product": None, "effective": None,
            "savings_pct": None, "stock_days": None, "verdict": "unknown"}
     try:
         oid = _oid(owner_id)
-        prod = match_product(db, oid, parsed.get("product", ""))
+        hint = f"{parsed.get('product', '') or ''} {raw_text or ''}".strip()
+        prod = match_product(db, oid, hint or parsed.get("product", ""))
         buy = int(parsed.get("buy_qty") or 0)
         free = int(parsed.get("free_qty") or 0)
         price = parsed.get("price")
@@ -370,7 +379,7 @@ def handle_scheme(db, profile, text: str, owner_id: int = 1) -> dict:
         parsed = extract_scheme(t)
         if not parsed:
             return {"handled": True, "reply": FALLBACK_MSG}
-        ev = evaluate(db, oid, parsed)
+        ev = evaluate(db, oid, parsed, raw_text=t)
         reply = build_reply(ev, lang)
         if ev.get("verdict") in ("unknown", "no_product") or ev.get("product") is None:
             return {"handled": True, "reply": reply}
