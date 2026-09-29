@@ -122,6 +122,88 @@ function Section({
   );
 }
 
+/* ---------- PWA install card (one-time, dismissible) ---------- */
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: string }>;
+}
+
+const INSTALL_DISMISS_KEY = "vyapaarai_install_dismissed";
+
+function InstallCard() {
+  const [dismissed, setDismissed] = useState(false);
+  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  const [standalone, setStandalone] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(INSTALL_DISMISS_KEY) === "1") setDismissed(true);
+      const mq = window.matchMedia?.("(display-mode: standalone)");
+      const ios = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+      if (mq?.matches || ios) setStandalone(true);
+    } catch {
+      /* ignore */
+    }
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferred(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+  }, []);
+
+  if (dismissed || standalone) return null;
+
+  const dismiss = () => {
+    try {
+      window.localStorage.setItem(INSTALL_DISMISS_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+  };
+
+  const install = async () => {
+    if (!deferred) return;
+    try {
+      await deferred.prompt();
+      await deferred.userChoice;
+    } catch {
+      /* ignore */
+    }
+    setDeferred(null);
+  };
+
+  return (
+    <Card delay={0.02}>
+      <div className="flex items-start gap-3">
+        <div className="flex-1">
+          <h3 className="card-title">📲 Install VyapaarAI</h3>
+          <p className="card-sub mb-2">App jaisa experience — ek tap me dukaan ka hisaab.</p>
+          <ol className="list-decimal space-y-1 pl-5 text-xs text-zinc-300">
+            <li>Chrome me ⋮ menu kholo (Android)</li>
+            <li>&ldquo;Install app&rdquo; / &ldquo;Add to Home screen&rdquo; dabao</li>
+            <li>Home screen se VyapaarAI kholo — full-screen chalega</li>
+          </ol>
+          <p className="mt-2 text-[11px] text-zinc-500">
+            iPhone: Share ⬆ → Add to Home Screen.
+          </p>
+          <div className="mt-2 flex gap-2">
+            {deferred && <Button onClick={install} className="px-4 py-1.5 text-xs">Install karo</Button>}
+            <Button variant="ghost" onClick={dismiss} className="px-3 py-1.5 text-xs">
+              Baad me
+            </Button>
+          </div>
+        </div>
+        <button type="button" onClick={dismiss} aria-label="Dismiss install" className="rounded px-1 text-zinc-500 hover:text-zinc-200">
+          ✕
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const health = useApi<HealthScore>("/health-score", REFRESH_MS);
   const brief = useApi<BriefItem[]>("/brief", REFRESH_MS);
@@ -291,6 +373,8 @@ export default function Dashboard() {
           </div>
         </div>
       </FadeIn>
+
+      <InstallCard />
 
       {/* row 1: score + subscores */}
       <div className="grid gap-3 lg:grid-cols-3">

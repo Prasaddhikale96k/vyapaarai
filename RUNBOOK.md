@@ -53,3 +53,8 @@ If you need dev-OTP (on-screen code) for local testing:
 3. **REVERT after testing:** flip back to `ENVIRONMENT=production`.
 
 > Never run production demos in `development` mode — dev_otp leaks the code on screen.
+
+## ROADMAP — Day-8 APK + Vision pipeline
+
+- **Day-8 APK = Capacitor wrap of this PWA (same codebase, ~1 day).** The PWA manifest (`frontend/public/manifest.webmanifest`, display standalone, PNG icons) is already install-ready; the APK step is a Capacitor shell around the same Next.js build — no rewrite, no second codebase.
+- **Vision pipeline chosen over on-device OpenCV — reasons:** (1) accuracy on handwritten/messy bills (Gemini Vision reads what contour detection cannot); (2) zero client weight (no OpenCV.js bundle, no WASM download on 2G); (3) single extraction path shared by WhatsApp photo/PDF, web Documents upload, and grid Scan Bill (one code path to maintain).
