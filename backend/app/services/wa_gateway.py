@@ -70,13 +70,7 @@ def _headers() -> dict:
     return {"X-API-Key": _api_key(), "Content-Type": "application/json"}
 
 
-def _digits(phone: str) -> str:
-    try:
-        if "@" in str(phone or ""):
-            phone = str(phone).split("@")[0]
-        return "".join(ch for ch in str(phone or "") if ch.isdigit())
-    except Exception:
-        return ""
+from app.services.phone import normalize_phone as _digits  # single util (S8#25)
 
 
 def _chat_id(phone: str) -> str:

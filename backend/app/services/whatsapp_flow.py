@@ -35,14 +35,7 @@ def _voice_reply_enabled() -> bool:
     return bool(reply and enabled)
 
 
-def _openwa_digits(value) -> str:
-    try:
-        s = str(value or "")
-        if "@" in s:
-            s = s.split("@")[0]
-        return "".join(ch for ch in s if ch.isdigit())
-    except Exception:
-        return ""
+from app.services.phone import normalize_phone as _openwa_digits  # single util (S8#25)
 
 
 def _extract_openwa(payload: dict, data: dict) -> dict | None:

@@ -28,11 +28,7 @@ class SendIn(BaseModel):
     message: str = ""
 
 
-def _digits(raw) -> str:
-    try:
-        return "".join(ch for ch in str(raw or "") if ch.isdigit())
-    except Exception:
-        return ""
+from app.services.phone import normalize_phone as _digits  # single util (S8#25)
 
 
 def serialize_contact(c) -> dict:
