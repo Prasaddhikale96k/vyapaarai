@@ -37,6 +37,8 @@ class RegisterRequest(BaseModel):
     phone: str
     name: Optional[str] = ""
     business_name: Optional[str] = ""
+    business_type: str
+    distributors: Optional[list] = None
     distributor_phone: Optional[str] = ""
     language: Optional[str] = "hi"
 
@@ -293,16 +295,44 @@ def web_register(request: Request, req: RegisterRequest, db: Session = Depends(g
     if prof is not None:
         return {"status": "pending",
                 "message": "⏳ Aapka account approval pending hai — admin approve karega 🙏"}
+    # P15: business_type enum validation (11 categories)
+    from app.services.owners import BUSINESS_TYPE_CODES, MAX_DISTRIBUTORS
+
+    btype = str(req.business_type or "").strip().lower()
+    if btype not in BUSINESS_TYPE_CODES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"business_type galat hai — chuno: {', '.join(sorted(BUSINESS_TYPE_CODES))}",
+        )
+    # P15: distributors list (10-13 digits each, dedupe, max 5)
+    dist_list = []
+    for raw in (req.distributors or []):
+        try:
+            dd = _digits(raw)
+        except Exception:
+            dd = ""
+        if dd and (10 <= len(dd) <= 13) and dd not in dist_list:
+            dist_list.append(dd)
+        if len(dist_list) >= MAX_DISTRIBUTORS:
+            break
+    # legacy single distributor_phone field -> merge into list
     try:
-        dist = _digits(req.distributor_phone)
+        legacy = _digits(req.distributor_phone)
     except Exception:
-        dist = ""
+        legacy = ""
+    if legacy and (10 <= len(legacy) <= 13) and legacy not in dist_list:
+        dist_list.insert(0, legacy)
+    dist_list = dist_list[:MAX_DISTRIBUTORS]
+    import json as _json
+
     lang = str(req.language or "hi").strip().lower()[:8] or "hi"
     prof = OwnerProfile(
         phone=stripped,
         name=str(req.name or "").strip()[:128] or None,
         business_name=str(req.business_name or "").strip()[:128] or None,
-        distributor_phone=dist or None,
+        business_type=btype,
+        distributors=_json.dumps(dist_list) if dist_list else None,
+        distributor_phone=dist_list[0] if dist_list else None,
         language=lang,
         allowed=False,
         onboarded=False,
@@ -325,6 +355,48 @@ def web_register(request: Request, req: RegisterRequest, db: Session = Depends(g
         pass
     return {"status": "pending",
             "message": "⏳ Admin approval ke baad login karein"}
+
+
+@router.get("/distributors/lookup")
+def distributors_lookup(q: str = Query(default=""), db: Session = Depends(get_db),
+                        _owner=Depends(get_optional_owner)):
+    """Smart picker (I1): approved owner_profiles me phone prefix ya name substring se match. Limit 8."""
+    from app.models import OwnerProfile
+
+    query = str(q or "").strip()
+    if not query:
+        return []
+    try:
+        digits = _digits(query)
+    except Exception:
+        digits = ""
+    try:
+        like = f"%{query[:64]}%"
+        q_obj = db.query(OwnerProfile).filter(OwnerProfile.allowed.is_(True))
+        if digits:
+            q_obj = q_obj.filter(
+                (OwnerProfile.phone.like(f"{digits[:12]}%")) |
+                (OwnerProfile.name.ilike(like)) |
+                (OwnerProfile.business_name.ilike(like))
+            )
+        else:
+            q_obj = q_obj.filter(
+                (OwnerProfile.name.ilike(like)) |
+                (OwnerProfile.business_name.ilike(like))
+            )
+        rows = q_obj.order_by(OwnerProfile.id).limit(8).all()
+        out = []
+        for p in rows:
+            d = _owner_to_dict(p, False)
+            out.append({
+                "phone": d.get("phone", ""),
+                "name": d.get("name", ""),
+                "business_name": d.get("business_name", ""),
+                "business_type": d.get("business_type", ""),
+            })
+        return out
+    except Exception:
+        return []
 
 
 @router.get("/me")

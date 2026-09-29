@@ -14,9 +14,11 @@ interface Owner {
   phone: string;
   name: string | null;
   business_name: string | null;
+  business_type: string | null;
   language: string;
   allowed: boolean;
   distributor_phone: string | null;
+  distributors: string[];
 }
 
 export default function AdminPage() {
@@ -97,9 +99,25 @@ export default function AdminPage() {
             <Card className="p-4 space-y-2">
               <p className="font-semibold">{o.name || "(naam nahi)"}</p>
               <p className="text-sm opacity-80">
-                {o.business_name || "-"} • {o.phone} • distributor: {o.distributor_phone || "-"} •{" "}
-                {o.language}
+                {o.business_name || "-"} • {o.phone} • {o.language}
               </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {o.business_type && (
+                  <span className="rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>
+                    {o.business_type}
+                  </span>
+                )}
+                {(o.distributors && o.distributors.length > 0
+                  ? o.distributors
+                  : o.distributor_phone
+                    ? [o.distributor_phone]
+                    : []
+                ).map((d) => (
+                  <span key={d} className="rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ border: "1px solid var(--card-border)" }}>
+                    {d}
+                  </span>
+                ))}
+              </div>
               <div className="flex gap-2">
                 <Button className="px-3 py-1.5" onClick={() => decide(o.id, true)}>
                   <Check size={14} className="mr-1" /> APPROVE

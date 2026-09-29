@@ -1,5 +1,6 @@
 """Multi-owner registration state machine + admin approval. 100% real, never raises."""
 
+import json
 import logging
 import os
 import random
@@ -11,10 +12,92 @@ logger = logging.getLogger("vyapaarai.owners")
 OTP_TTL_MIN = 5
 OTP_MAX_ATTEMPTS = 3
 
+# P15: 11 MSME business categories (I3). Codes are canonical; labels human.
+BUSINESS_TYPES = [
+    ("kirana", "Kirana / General Store"),
+    ("pharmacy", "Pharmacy / Medical"),
+    ("hardware", "Hardware"),
+    ("garments", "Garments / Fashion"),
+    ("electronics", "Electronics / Mobile"),
+    ("bakery", "Bakery / Food"),
+    ("dairy", "Dairy"),
+    ("stationery", "Stationery"),
+    ("auto_parts", "Auto Parts"),
+    ("services", "Services"),
+    ("other", "Other"),
+]
+BUSINESS_TYPE_CODES = {c for c, _ in BUSINESS_TYPES}
+MAX_DISTRIBUTORS = 5
+
+
+def _category_list_text() -> str:
+    lines = [f"{i}. {label}" for i, (_c, label) in enumerate(BUSINESS_TYPES, start=1)]
+    return "Apni business category chuno (number ya naam):\n" + "\n".join(lines)
+
+
+def _parse_category(text: str):
+    """Number (1-11) ya naam se business_type code nikalo. None = nahi mila."""
+    t = str(text or "").strip()
+    if not t:
+        return None
+    m = re.match(r"^(\d{1,2})$", t)
+    if m:
+        idx = int(m.group(1))
+        if 1 <= idx <= len(BUSINESS_TYPES):
+            return BUSINESS_TYPES[idx - 1][0]
+        return None
+    tl = t.lower()
+    for code, label in BUSINESS_TYPES:
+        if tl == code or tl == label.lower():
+            return code
+    for code, label in BUSINESS_TYPES:
+        if code in tl or label.lower() in tl:
+            return code
+    return None
+
+
+def _parse_distributors(text: str):
+    """Comma/space-separated phones -> deduped list (10-13 digits each, max 5)."""
+    raw = str(text or "").replace(",", " ")
+    parts = raw.split()
+    out = []
+    for part in parts:
+        d = _digits(part)
+        if not d:
+            continue
+        if not (10 <= len(d) <= 13):
+            continue
+        if d not in out:
+            out.append(d)
+        if len(out) >= MAX_DISTRIBUTORS:
+            break
+    return out
+
+
+def _get_distributors(prof) -> list:
+    try:
+        raw = getattr(prof, "distributors", None)
+        if raw:
+            arr = json.loads(raw)
+            if isinstance(arr, list):
+                return [str(x) for x in arr]
+    except Exception:
+        pass
+    d = str(getattr(prof, "distributor_phone", "") or "").strip()
+    return [d] if d else []
+
+
+def _set_distributors(prof, phones: list) -> None:
+    phones = [str(p) for p in (phones or []) if str(p).strip()][:MAX_DISTRIBUTORS]
+    prof.distributors = json.dumps(phones) if phones else None
+    prof.distributor_phone = phones[0] if phones else None
+
+
 _STEP_ASK = {
     "NAME": "🙏 Namaste! VyapaarAI mein swagat. Pehle apna NAAM bhejiye.",
-    "BUSINESS": "Business/dukaan ka naam?",
-    "DISTRIBUTOR": "Aapke DISTRIBUTOR ka mobile number?",
+    "BUSINESS": "Dukaan ka naam? (free text)",
+    "CATEGORY": _category_list_text(),
+    "DISTRIBUTOR": "Aapke DISTRIBUTOR ke mobile numbers? (comma-separated, max 5)",
     "LANGUAGE": "Bhasha? (Hindi/Marathi/English...)",
 }
 
@@ -214,15 +297,24 @@ def advance_registration(db, phone: str, text: str) -> dict:
             if len(t) < 2:
                 return {"reply": "Dukaan ka naam thoda lamba likhiye 🙏", "profile": prof}
             prof.business_name = t[:128]
+            prof.reg_step = "CATEGORY"
+            _save(db)
+            return {"reply": _STEP_ASK["CATEGORY"], "profile": prof}
+
+        if step == "CATEGORY":
+            code = _parse_category(t)
+            if not code:
+                return {"reply": _STEP_ASK["CATEGORY"], "profile": prof}
+            prof.business_type = code
             prof.reg_step = "DISTRIBUTOR"
             _save(db)
             return {"reply": _STEP_ASK["DISTRIBUTOR"], "profile": prof}
 
         if step == "DISTRIBUTOR":
-            d = _digits(t)
-            if not (10 <= len(d) <= 13):
-                return {"reply": "Distributor ka 10-digit mobile number bhejiye 🙏", "profile": prof}
-            prof.distributor_phone = d
+            phones = _parse_distributors(t)
+            if not phones:
+                return {"reply": "Distributor ka 10-digit mobile number bhejiye (comma-separated, max 5) 🙏", "profile": prof}
+            _set_distributors(prof, phones)
             prof.reg_step = "LANGUAGE"
             _save(db)
             return {"reply": _STEP_ASK["LANGUAGE"], "profile": prof}
@@ -383,10 +475,12 @@ def serialize_owner(prof) -> dict:
             "phone": getattr(prof, "phone", ""),
             "name": getattr(prof, "name", ""),
             "business_name": getattr(prof, "business_name", ""),
+            "business_type": getattr(prof, "business_type", "") or "",
             "language": getattr(prof, "language", "hi") or "hi",
             "allowed": bool(getattr(prof, "allowed", False)),
             "onboarded": bool(getattr(prof, "onboarded", False)),
             "distributor_phone": getattr(prof, "distributor_phone", ""),
+            "distributors": _get_distributors(prof),
             "upi_vpa": getattr(prof, "upi_vpa", "") or "",
             "reg_step": getattr(prof, "reg_step", None),
         }

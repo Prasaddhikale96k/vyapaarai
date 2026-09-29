@@ -621,7 +621,7 @@ def handle_incoming(payload: dict) -> None:
 def build_and_send_brief(owner=None) -> dict:
     """Build morning brief and deliver via notify. Never raises.
 
-    JWT caller (owner profile) wins when present; else OWNER_PHONE/first profile.
+    S8#10: JWT caller (owner profile) only — OWNER_PHONE/first-profile fallback removed.
     Brief numbers are always scoped to the resolved owner.
     """
     try:
@@ -631,53 +631,35 @@ def build_and_send_brief(owner=None) -> dict:
             ensure_p4_schema()
         except Exception:
             pass
-        from app.models import OwnerProfile
         from app.services import notify
         from app.services.intelligence import build_brief
 
         try:
-            from app import config as _cfg
-
-            cfg_owner = (os.getenv("OWNER_PHONE", "") or str(getattr(_cfg, "OWNER_PHONE", "") or "")).strip()
-            default_lang = (os.getenv("TTS_DEFAULT_LANGUAGE", "") or str(
-                getattr(_cfg, "TTS_DEFAULT_LANGUAGE", "hi") or "hi")).strip() or "hi"
+            default_lang = (os.getenv("TTS_DEFAULT_LANGUAGE", "") or "hi").strip() or "hi"
         except Exception:
-            cfg_owner, default_lang = "", "hi"
+            default_lang = "hi"
+        if owner is None:
+            return {"delivered": False, "simulated": True, "items": [],
+                    "error": "Login chahiye — /brief/send ke liye JWT zaroori hai"}
         db = SessionLocal()
         try:
             lang = default_lang
             to = ""
             oid = 1
-            if owner is not None:
-                # JWT caller: apna data, apni bhasha, apna number
-                try:
-                    oid = _owner_id_of(owner)
-                except Exception:
-                    oid = 1
-                try:
-                    to = _openwa_digits(str(getattr(owner, "phone", "") or ""))
-                except Exception:
-                    to = ""
-                try:
-                    if str(getattr(owner, "language", "") or "").strip():
-                        lang = str(owner.language).strip()
-                except Exception:
-                    pass
-            else:
-                try:
-                    profile = db.query(OwnerProfile).order_by(OwnerProfile.id).first()
-                except Exception:
-                    profile = None
-                try:
-                    if profile is not None and (profile.language or "").strip():
-                        lang = str(profile.language).strip()
-                except Exception:
-                    pass
-                to = cfg_owner or (str(profile.phone) if profile is not None else "")
-                try:
-                    oid = _owner_id_of(profile) if profile is not None else 1
-                except Exception:
-                    oid = 1
+            # JWT caller: apna data, apni bhasha, apna number
+            try:
+                oid = _owner_id_of(owner)
+            except Exception:
+                oid = 1
+            try:
+                to = _openwa_digits(str(getattr(owner, "phone", "") or ""))
+            except Exception:
+                to = ""
+            try:
+                if str(getattr(owner, "language", "") or "").strip():
+                    lang = str(owner.language).strip()
+            except Exception:
+                pass
             try:
                 brief = build_brief(db, owner_id=oid)
             except Exception:

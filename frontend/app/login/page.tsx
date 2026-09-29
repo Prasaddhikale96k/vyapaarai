@@ -48,7 +48,7 @@ export default function LoginPage() {
 
   async function verifyOtp() {
     const digits = phone.replace(/\D/g, "");
-    if (code.replace(/\D/g, "").length < 4) {
+    if (code.replace(/\D/g, "").length !== 6) {
       toast.error("6-digit OTP daalo");
       return;
     }

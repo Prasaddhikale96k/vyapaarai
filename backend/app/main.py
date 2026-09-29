@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app import config as _cfg
 from app.limits import limiter
-from app.db import Base, engine, ensure_access_schema, ensure_p4_schema, ensure_prod_schema
+from app.db import Base, engine, ensure_access_schema, ensure_p4_schema, ensure_p15_schema, ensure_prod_schema
 from app.routers import actions, auth, chat, data, documents, ingest, intelligence, reports, whatsapp
 from app.services.sync import start_watchers, startup_scan, stop_watchers
 
@@ -50,6 +50,17 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Referrer-Policy"] = "no-referrer"
+            # S8#17: HSTS + CSP (frontend-safe: inline styles/scripts + Google Fonts + Supabase realtime)
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data: blob:; "
+                "connect-src 'self' https://goonzeuzogkzvjntbfjr.supabase.co wss://goonzeuzogkzvjntbfjr.supabase.co; "
+                "frame-ancestors 'none'"
+            )
         except Exception:
             pass
         try:
@@ -98,6 +109,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_p4_schema()
     ensure_access_schema()
+    ensure_p15_schema()
     ensure_prod_schema()
     try:
         startup_scan()  # restart-safe: ledger skips already-ingested files

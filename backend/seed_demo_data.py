@@ -8,7 +8,7 @@ import random
 from datetime import date, timedelta
 from typing import Dict
 
-from app.db import Base, SessionLocal, engine, ensure_access_schema, ensure_p4_schema, ensure_prod_schema
+from app.db import Base, SessionLocal, engine, ensure_access_schema, ensure_p4_schema, ensure_p15_schema, ensure_prod_schema
 from app.models import (
     Action,
     ChatMessage,
@@ -137,6 +137,7 @@ def run_seed() -> Dict[str, int]:
     Base.metadata.create_all(bind=engine)
     ensure_p4_schema()
     ensure_access_schema()
+    ensure_p15_schema()
     ensure_prod_schema()
     db = SessionLocal()
     try:

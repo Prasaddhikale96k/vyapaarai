@@ -177,12 +177,15 @@ class OwnerProfile(Base):
     allowed = Column(Boolean, default=False, nullable=False)
     onboarded = Column(Boolean, default=False, nullable=False)
     distributor_phone = Column(String(32), nullable=True)
-    reg_step = Column(String(16), nullable=True)  # NAME|BUSINESS|DISTRIBUTOR|LANGUAGE|OTP
+    reg_step = Column(String(16), nullable=True)  # NAME|BUSINESS|CATEGORY|DISTRIBUTOR|LANGUAGE|OTP
     otp_code = Column(String(16), nullable=True)
     otp_expires_at = Column(DateTime, nullable=True)
     otp_attempts = Column(Integer, default=0, nullable=False)
     # --- Phase B: UPI collections ---
     upi_vpa = Column(String(64), nullable=True)
+    # --- P15: business taxonomy + multi-distributor ---
+    business_type = Column(String(32), nullable=True)
+    distributors = Column(Text, nullable=True)  # JSON array of phone strings
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 

@@ -169,6 +169,96 @@ def ensure_p4_schema() -> None:
         pass
 
 
+def ensure_p15_schema() -> None:
+    """P15: owner_profiles.business_type + distributors (JSON array of phones).
+
+    Additive + non-destructive, idempotent, sqlite+PG safe, never raises.
+    Backfill: distributors from existing distributor_phone; distributor_phone
+    mirrored to distributors[0] (both always exposed).
+    """
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text as _text
+
+        is_sqlite = str(engine.url).startswith("sqlite")
+        prof_cols = {
+            "business_type": "VARCHAR(32)",
+            "distributors": "TEXT",
+        }
+        with engine.connect() as conn:
+            if is_sqlite:
+                try:
+                    rows = conn.execute(_text("PRAGMA table_info(owner_profiles)")).fetchall()
+                    have = {r[1] for r in rows} if rows else set()
+                except Exception:
+                    have = set()
+                for col, ddl in prof_cols.items():
+                    if col not in have:
+                        try:
+                            conn.execute(_text(f"ALTER TABLE owner_profiles ADD COLUMN {col} {ddl}"))
+                            conn.commit()
+                        except Exception:
+                            pass
+            else:
+                for col, ddl in prof_cols.items():
+                    try:
+                        conn.execute(_text(
+                            f"ALTER TABLE owner_profiles ADD COLUMN IF NOT EXISTS {col} {ddl}"))
+                        conn.commit()
+                    except Exception:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+        # Backfill distributors <- distributor_phone (one-time, non-destructive)
+        try:
+            from app.models import OwnerProfile
+
+            db = SessionLocal()
+            try:
+                rows = db.query(OwnerProfile).all()
+                changed = False
+                for prof in rows:
+                    try:
+                        existing = getattr(prof, "distributors", None)
+                        arr = []
+                        if existing:
+                            try:
+                                import json as _json
+
+                                parsed = _json.loads(existing)
+                                if isinstance(parsed, list):
+                                    arr = [str(x) for x in parsed]
+                            except Exception:
+                                arr = []
+                        dphone = str(getattr(prof, "distributor_phone", "") or "").strip()
+                        if dphone and dphone not in arr:
+                            arr.insert(0, dphone)
+                        if arr:
+                            import json as _json
+
+                            prof.distributors = _json.dumps(arr)
+                            if not dphone:
+                                prof.distributor_phone = arr[0]
+                            changed = True
+                    except Exception:
+                        continue
+                if changed:
+                    db.commit()
+            finally:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def ensure_prod_schema() -> None:
     """Production indexes for Postgres (idempotent, PG-only, never raises).
 
