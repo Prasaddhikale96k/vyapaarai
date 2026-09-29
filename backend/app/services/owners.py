@@ -239,9 +239,13 @@ def advance_registration(db, phone: str, text: str) -> dict:
             except Exception:
                 return {"reply": "Kuch gadbad ho gayi, dobara try karein 🙏", "profile": prof}
             sent = _send_otp_text(phone, code)
-            reply = "🔐 VyapaarAI OTP: bheja gaya hai. Ise reply karke verify karein."
-            if not sent and _is_dev():
+            if sent:
+                reply = "🔐 VyapaarAI OTP: bheja gaya hai. Ise reply karke verify karein."
+            elif _is_dev():
                 reply = f"🔐 VyapaarAI OTP: {code}. Ise reply karke verify karein. (dev OTP: {code})"
+            else:
+                # P15: production me OTP code WA reply me KABHI echo nahi hota
+                reply = "❌ OTP bheja nahi ja saka — WhatsApp bridge (919511996418) check karo, phir dobara try karein."
             return {"reply": reply, "profile": prof, "otp_sent": sent}
 
         if step == "OTP":

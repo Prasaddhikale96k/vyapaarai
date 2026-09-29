@@ -61,8 +61,40 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def _assert_prod_auth_guard() -> None:
+    """P15 startup pin: ENVIRONMENT != development me dev_otp + WA OTP-echo disabled.
+
+    Functional check (not just log): dev_otp sirf _is_dev() branch me banta hai,
+    aur owners machine production me code echo nahi karta. Fail hard = misconfig.
+    """
+    try:
+        env = str(getattr(_cfg, "ENVIRONMENT", "development") or "development").strip().lower()
+        if env == "development":
+            return
+        import inspect
+
+        from app.routers import auth as _auth
+        from app.services import owners as _owners
+
+        src_auth = inspect.getsource(_auth)
+        src_owners = inspect.getsource(_owners)
+        problems = []
+        if "dev_otp" in src_auth and "_is_dev()" not in src_auth:
+            problems.append("auth.py: dev_otp bina _is_dev() guard")
+        if "dev OTP: {code}" in src_owners and "_is_dev()" not in src_owners:
+            problems.append("owners.py: OTP echo bina _is_dev() guard")
+        if problems:
+            raise RuntimeError("PRODUCTION AUTH GUARD FAIL: " + "; ".join(problems))
+        logger.info("PRODUCTION auth mode ON (ENVIRONMENT=%s): dev_otp disabled, WA OTP-echo disabled", env)
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _assert_prod_auth_guard()
     Base.metadata.create_all(bind=engine)
     ensure_p4_schema()
     ensure_access_schema()

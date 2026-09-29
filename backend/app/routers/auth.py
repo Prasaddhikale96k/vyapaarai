@@ -208,9 +208,14 @@ def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail="OTP bana nahi paya")
     sent = _send_login_otp(phone, code)
     out = {"sent": bool(sent)}
-    if not sent and _is_dev():
-        out["sent"] = True
-        out["dev_otp"] = code
+    if not sent:
+        if _is_dev():
+            out["sent"] = True
+            out["dev_otp"] = code
+        else:
+            # P15: production me dev_otp KABHI nahi — honest failure with message
+            out["sent"] = False
+            out["error"] = "OTP WhatsApp par nahi bheja ja saka — bridge (919511996418) check karo"
     return out
 
 
