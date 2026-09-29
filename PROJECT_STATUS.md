@@ -440,3 +440,38 @@ ightly_report cron; dashboard report popover.
 - Photo-only scheme without caption goes through normal document flow (no scheme verdict; caption/text schemes fully work).
 - Live LLM providers degraded in this environment (groq model 404, gemini 400) — demo_fallback carries `/chat`; scheme regex path is LLM-independent; LLM strict-JSON backup activates when providers recover.
 - Old-SIM QR + OTP-arrival smoke = WAITING-ON-HUMAN. Prod Supabase not reseeded this pass (truth proven on scratch-sqlite reseed; `/data/reset` is the prod-reseed path).
+
+## MASTER P18 — BUG-HUNT & PIPELINE PROOF PASS (2026-09-29) — E2E 39/39 GREEN
+
+### SEC 0 — debug skills
+- Cloned `obra/superpowers` to temp OUTSIDE repo; copied `systematic-debugging`, `verification-before-completion`, `test-driven-development` into `.opencode/skills/`; temp deleted. (`root-cause-tracing` + `defense-in-depth` are not standalone skills in that repo — their `.md` companions ship INSIDE `systematic-debugging/` and were copied too; same rules followed.)
+- Loaded installed `debugging-and-error-recovery` + `code-review-and-quality`; all five rule-sets applied (cited in report).
+
+### PH 1+2 — `scripts/e2e_all.py` (permanent regression proof, scratch sqlite, no live WA/LLM)
+First run: **35 pass / 4 FAIL / 0 skip**. Verifies alongside: p125 4/4, p15 9/9, p3 9/9 (once each).
+
+### Bug tickets (systematic-debugging: reproduce → trace → single fix → verify)
+| ID | Sev | Symptom | Root cause (traced, not guessed) | Fix (commit) |
+|---|---|---|---|---|
+| F1 | **P0** demo-blocker | Voice full loop 422, empty transcript on clean Hindi mp3 | Windows file lock: `NamedTemporaryFile(delete=True)` holds exclusive handle → PyAV reopen → PermissionError (proven by delete=True vs False A/B). Same lock would have killed TTS saves. | `0d6800c` voice.py: mkstemp+close helpers for STT/TTS/retry + permission-denied retry layer |
+| F4 | **P0** demo-blocker | `GET /reports/daily` 500 (`bytes(None)`) | P8-F1 edit consumed `build_daily_pdf`'s footer/build/return (shared block) → implicit `None` | `ab2dd54` restored daily ending; both PDFs 200 |
+| F2 | **P1** judge-visible | Scheme on unit-suffixed names → `no_product`, no action | (1) cleaner ate size info; (2) substring matcher tied on multi-pack bases (Atta 5kg vs 10kg) | `95a0371` unit-agnostic cleaner+tokens, then `66781df` strict-best overlap + raw-text size hint (5kg wins; true ties ask owner; spec's "Parle-G" example matches) |
+| F3 | test bug | e2e onboarded assert `True->True` | Assertion demanded `not onb0`, but seed ships onboarded=True | fixed assertion in e2e (insert + flip proven) |
+- P2 polish: none found (everything else passed first attempt). Fix attempts used: F1×1, F4×1, F2×2 — all within budget.
+
+### PH 3 close — final: **E2E ALL 39/39 GREEN** (fresh full re-runs after every fix), p125 4/4, p15 9/9, p3 9/9.
+
+### PH 4 — static sweep
+- `pip install ruff` (dev tool only, NOT in requirements.txt): default run = 1118 hits, ~all BLE001 = the deliberate never-raise convention → correctly ignored. Targeted `F401,F821,F822,F841,E9` = 22 real findings (unused imports + 1 dead var) → all fixed (`c324ec7`), e2e re-run 39/39 after.
+- `npx tsc --noEmit` clean; `npm run build` green.
+- Tracked-file greps: `console.log` 0 · TODO/FIXME 0 · secrets (`gsk_`, `AIzaSy`, service_role, private keys) 0 · product `/admin` links 0.
+
+### PH 5 — local demo prep
+- `scripts/warmup.py`: whisper load (12.5s) + orchestrate + health (38) + credit PDF (3208B) + forecast → **WARMUP: ALL HOT**. NOTE: first orchestrate takes ~137s here (dead-provider retries → fallback); run warmup BEFORE the mam demo, later answers are fast.
+- `scripts/demo_day.cmd`: backend start + warmup + `/whatsapp/status` + human checklist.
+- LIVE SMOKE (human-pending — no phones/bridge in this environment, server-side verified instead): OTP arrival on 919834854511 · owner "hi" → history row · live scheme → action · ONE bill photo → vision pending (Gemini 400 HERE — if it 400s on demo machine, mint a fresh free key; vision path is provider-gated, everything else is local) · voice note → transcript (now proven locally E2E).
+
+### P18 HONEST GAPS (new)
+- edge-tts was missing from the installed env (present in requirements.txt) — installed for the voice proof; demo machine needs `pip install -r requirements.txt` + internet for first TTS/STT-model fetch (whisper-small is cached here).
+- First-orchestrate latency ~2min with dead providers (retry chain); warmup absorbs it.
+- No P2 polish items found — stated plainly, not padded.
