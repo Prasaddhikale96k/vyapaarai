@@ -603,14 +603,24 @@ def handle_incoming(payload: dict) -> None:
                     logger.info("registration route failed: %s", str(exc)[:200])
                 return
 
-            # ---- GATE 2: registered but approval pending ----
+            # ---- GATE 2: registered but not yet active (OTP verify pending) ----
             try:
                 allowed = bool(getattr(profile, "allowed", False))
             except Exception:
                 allowed = False
             if not allowed:
                 try:
-                    _reply(phone, "⏳ Aapka account approval pending hai. Admin approve karega to shuru hoga 🙏")
+                    try:
+                        _lang = str(getattr(profile, "language", "") or "hi").strip().lower()
+                    except Exception:
+                        _lang = "hi"
+                    if _lang == "en":
+                        _msg = ("🔐 Your account isn't active yet — verify the OTP "
+                                "on /login and start ✅ (OTP aayega WhatsApp par)")
+                    else:
+                        _msg = ("🔐 Account abhi active nahi hai — /login par "
+                                "OTP verify karo aur shuru karo ✅ (OTP WhatsApp par aayega)")
+                    _reply(phone, _msg)
                 except Exception:
                     pass
                 return

@@ -17,9 +17,6 @@ export default function Footer() {
           <Link href="/register" className="hover:opacity-80 active:opacity-60">
             Register
           </Link>
-          <Link href="/admin" className="hover:opacity-80 active:opacity-60">
-            Admin
-          </Link>
         </nav>
         <p className="font-devanagari text-base" style={{ color: "rgba(250,247,242,0.5)" }} aria-label="Vyapaar brand signature">
           व्यापार
