@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     voice_enabled: bool = True
     voice_reply: bool = True
     owner_phone: str = ""
+    assistant_phone: str = ""
     tts_default_language: str = "hi"
 
 
@@ -71,6 +72,7 @@ def _env_bool(name: str, default: bool) -> bool:
 VOICE_ENABLED = _env_bool("VOICE_ENABLED", bool(settings.voice_enabled))
 VOICE_REPLY = _env_bool("VOICE_REPLY", bool(settings.voice_reply))
 OWNER_PHONE = os.getenv("OWNER_PHONE", settings.owner_phone or "").strip()
+ASSISTANT_PHONE = os.getenv("ASSISTANT_PHONE", settings.assistant_phone or "").strip()
 TTS_DEFAULT_LANGUAGE = os.getenv("TTS_DEFAULT_LANGUAGE", settings.tts_default_language or "hi").strip() or "hi"
 EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", settings.evolution_api_url or "http://localhost:8080").rstrip("/")
 EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", settings.evolution_api_key or "")

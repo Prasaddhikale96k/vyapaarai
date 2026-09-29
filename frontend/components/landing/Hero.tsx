@@ -100,19 +100,19 @@ export default function Hero() {
           your language, on WhatsApp.
         </p>
 
-        <div className="mt-10 flex flex-col flex-wrap items-center justify-center gap-4 min-[481px]:flex-row">
+        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <Link
             data-gsap="cta"
             href="/register"
-            className="inline-flex h-14 w-full max-w-80 items-center justify-center gap-2 whitespace-nowrap rounded-full px-8 text-lg font-semibold leading-none text-white transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 active:scale-[0.98] min-[481px]:w-auto"
+            className="inline-flex min-h-[56px] items-center rounded-full px-8 py-4 text-lg font-semibold text-white transition-transform focus-visible:outline-2 focus-visible:outline-offset-4"
             style={{ background: "#E8771A", outlineColor: "#E8771A", textDecoration: "none", boxShadow: "0 0 40px rgba(232,119,26,0.25)" }}
           >
-            See It Work <span aria-hidden="true">→</span>
+            See It Work →
           </Link>
           <button
             data-gsap="cta"
             onClick={() => scrollToId("how-it-works")}
-            className="inline-flex h-14 w-full max-w-80 items-center justify-center gap-2 whitespace-nowrap rounded-full border px-8 text-lg font-semibold leading-none transition-all focus-visible:outline-2 focus-visible:outline-offset-4 hover:-translate-y-0.5 active:scale-[0.98] min-[481px]:w-auto"
+            className="inline-flex min-h-[56px] items-center gap-2 rounded-full border px-8 py-4 text-lg font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
             style={{ borderColor: "#E8DDD0", color: "#1A1209", background: "transparent", outlineColor: "#E8771A" }}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
