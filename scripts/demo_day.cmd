@@ -10,6 +10,9 @@ python ..\scripts\warmup.py
 echo === 3/4 whatsapp bridge status ===
 curl -s http://localhost:8000/whatsapp/status
 echo.
+echo === 3b/4 LANDING TRUTH (live /public/stats - zeros mean fresh DB) ===
+curl -s http://localhost:8000/public/stats
+echo.
 echo === 4/4 DEMO CHECKLIST (human phones needed) ===
 echo [ ] old SIM 919511996418 phone ON + OpenWA connected (backend\openwa_start.cmd + setup_whatsapp.py QR)
 echo [ ] owner 919834854511 WA "hi" -^> machine replies

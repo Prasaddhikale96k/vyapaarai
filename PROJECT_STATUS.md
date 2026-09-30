@@ -498,3 +498,26 @@ New web registration → redirected to /login → re-entered number → NO OTP a
 
 ### HUMAN RETEST (OPEN)
 Brand-new number on /register → OTP step same page → OTP ARRIVES on that phone → verify → /app. If the delivery-failed message appears instead, report the rid from the backend log.
+
+## MASTER P20-REAL — FACTORY RESET + REAL-ONLY DATA + LANDING TRUTH (2026-09-30)
+
+### Owner policy (law)
+Live/demo DB = ONLY real data via real flows. `seed_demo_data.py` = OFFLINE TEST FIXTURE ONLY (verifies on scratch sqlite stay green). Landing claims only numbers true in the live DB right now.
+
+### PH1 — real-only plumbing (committed `2c9358e`)
+- `scripts/reset_owner.py --phone X [--wipe-business yes]`: deletes profile; wipe deletes 14 tables in FK-safe order, literal "yes", per-table counts, idempotent (proven: unknown phone → clean no-op on live PG).
+- Seed header + RUNBOOK marked fixture-only; RUNBOOK carries NO-FAKE-DATA policy + reset drill + stats note.
+- REAL voice counter: `log_voice_entry()` on STT success in BOTH paths (web `/chat/voice`, WA audio) → `voice_logs`. e2e voice check now asserts `voice_logs +1`.
+
+### PH2 — truth engine (committed `c3abb88`)
+- `GET /public/stats` (no auth, 60s cache): truth owner = first onboarded → OWNER_PHONE profile → owner 1. Live proof vs prod PG: `{overdue_total:53400.0, low_stock_count:5, voice_entries:0, health_now:37, business_name:"Sharma Kirana Traders"}` — note 5 low (not 18) and 0 voice: engine already tells the truth the old landing didn't.
+- Landing swap (data-source ONLY, same typography): `DemoNumbers` 4 DB cards ← live stats, loading/all-zero → qualitative zero-state lines; static demo chart relabeled "Sample Preview"; `SocialProofBar` → client marquee with live/zero variants. Narrative copy, testimonials, problem sections, mocks untouched (product previews, not DB claims). `demo_day.cmd` prints `/public/stats`.
+
+### PH3 — fresh real onboarding (HUMAN-ASSISTED, exact order — OPEN)
+1. Stop backend + openwa. 2. `cd backend && python ../scripts/reset_owner.py --phone 919834854511 --wipe-business yes` (expect: profile + business rows removed, counts printed). 3. Delete OpenWA session folder → `openwa_start.cmd` → `setup_whatsapp.py` → NEW QR → old-SIM scan → `/whatsapp/status` connected. 4. `/register` 919834854511 → same-page OTP → arrives on WA → verify → `/app` EMPTY (correct). 5. Real bills/photos/voice via WA + grid/CSV/camera — no seed, ever. 6. Landing zeros → real counts; screenshot both states.
+- STATUS: steps 1–6 need the human at the keyboard with both phones. NOT executed yet — wiping live business rows without the human ready would strand the demo with no path back (seed banned). Awaiting confirmation.
+
+### PH4 — sweep (P20 close, pre-reset)
+- e2e **41/41 GREEN** (fixture sqlite) · p125 **6/6** · p15 **9/9** · p3 **9/9** · tsc clean · build green.
+- Zero-state landing: code-verified (live=false → qualitative lines, no numerals); browser screenshot-proof deferred to post-reset human pass (both states).
+- HONEST GAPS: reset/QR/register/real-entries all human-pending; live PG still holds seed-era rows until the reset runs; voice counter starts at 0 truthfully.
