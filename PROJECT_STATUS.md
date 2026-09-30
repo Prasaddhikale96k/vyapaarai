@@ -475,3 +475,26 @@ First run: **35 pass / 4 FAIL / 0 skip**. Verifies alongside: p125 4/4, p15 9/9,
 - edge-tts was missing from the installed env (present in requirements.txt) — installed for the voice proof; demo machine needs `pip install -r requirements.txt` + internet for first TTS/STT-model fetch (whisper-small is cached here).
 - First-orchestrate latency ~2min with dead providers (retry chain); warmup absorbs it.
 - No P2 polish items found — stated plainly, not padded.
+
+## MASTER P19-HOTFIX — SEAMLESS REGISTER→OTP + HONEST DELIVERY (2026-09-30)
+
+### Live incident (owner-reported)
+New web registration → redirected to /login → re-entered number → NO OTP arrived (bridge connected). Two compounding causes: (a) OTP request gated on profile state/phone-variant mismatch instead of "registered = eligible"; (b) register page had no OTP step, forcing the /login hop. Delivery failures were also silent (old `sent:false+error` 200).
+
+### Gate model (FINAL)
+- **UNKNOWN phone** → 403 "pehle register karo" (+ register hint in message).
+- **REGISTERED (allowed False OR True)** → OTP always sent; verify activates (OTP=onboarding, unchanged).
+- **blocked==True (ops suspension)** → 403 "suspended — ops se sampark karo" on request + 401 on verify/login; WA inbound gets suspended reply. `allowed` stays the onboarding flag; suspend/restore touches ONLY `blocked` (`reject_owner`/`approve_owner`).
+- **Delivery honesty**: send → retry ONCE → still failing + production → **502** `{sent:false, reason:"whatsapp-delivery-failed", detail:"WhatsApp pe OTP delivery fail hua — 30s baad dobara try karo"}`, rid logged server-side, code NEVER included. Dev `dev_otp` path unchanged. RUNBOOK incident line: delivery-502 → bridge drill (old phone ON → `openwa_start.cmd` → QR re-scan → `/whatsapp/status`), report the rid from backend log.
+
+### Changes
+- Backend: `owner_profiles.blocked` (Boolean dflt False, ensure_p15 backfill sqlite+PG) · `otp/request` policy rewrite · `get_current/optional_owner` + `otp_verify` + WA machine + WA GATE-1a blocked rejections · `serialize_owner.blocked` · suspend SMS copy.
+- Frontend: `/register` same-page OTP step (masked `91******18`, 6-digit + paste + label + inline errors, Verify → token → `/app`, wrong×3 → resend nudge, Resend 30s cooldown, "Number galat? Badlo" preserves form, "Already active? Login →" with `?phone=`); `/login` accepts `?phone=` prefill (no-Suspense `window.location` read).
+- Tests: `verify_p125` 6 checks (blocked suspend/restore, unknown hint, seamless register→otp→verify, dev-mode pin) · e2e AUTH +2 (41 checks) · `verify_p15` check 2 updated to the 502 honesty contract.
+
+### Verify state (P19 close)
+- e2e **41/41 GREEN** · p125 **6/6** · p15 **9/9** · p3 **9/9** · tsc clean · build green · /register + /login 200.
+- Prod PG migration note: `blocked` column did NOT exist on Supabase — caught live by the new checks, fixed by lifespan `ensure_p15_schema` on backend restart (verify self-migrates too). Backend was restarted with the new code; :8000 + :3000 both serving.
+
+### HUMAN RETEST (OPEN)
+Brand-new number on /register → OTP step same page → OTP ARRIVES on that phone → verify → /app. If the delivery-failed message appears instead, report the rid from the backend log.

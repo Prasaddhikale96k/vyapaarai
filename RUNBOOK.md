@@ -44,6 +44,10 @@ Symptom: `/whatsapp/status` shows `connected: false`, or OTPs don't arrive.
 4. Verify: `GET http://localhost:8000/whatsapp/status` → `connected: true`.
 5. Keep the old phone **charged** — a dead SIM = no OTPs = no login.
 
+### OTP 502 INCIDENT (P19: "WhatsApp pe OTP delivery fail hua")
+- UI shows "30s baad dobara try karo" when `/auth/otp/request` returns **502** `{sent:false, reason:"whatsapp-delivery-failed"}` — the code is NEVER leaked; user just retries.
+- Run the bridge-down drill above, then note the `rid` from the backend log line `otp delivery failed rid=...` when reporting.
+
 ## INCIDENT MODE (dev OTP for local testing only)
 
 If you need dev-OTP (on-screen code) for local testing:

@@ -71,14 +71,16 @@ try:
         "p.allowed=True; db.commit(); db.close();"
         "c=TestClient(app, raise_server_exceptions=False);"
         "import json; r=c.post('/auth/otp/request', json={'phone':'919834854511'});"
-        "j=r.json(); print(json.dumps({'status':r.status_code,'has_dev_otp':'dev_otp' in j,'sent':j.get('sent'),'has_error':'error' in j}))"
+        "j=r.json(); print(json.dumps({'status':r.status_code,'has_dev_otp':'dev_otp' in j,'sent':j.get('sent'),'reason':j.get('reason'),'has_detail':'detail' in j}))"
     )
     out = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
                          cwd=os.path.dirname(os.path.abspath(__file__)), timeout=180)
     line = [l for l in out.stdout.strip().splitlines() if l.startswith("{")]
     j = json.loads(line[-1]) if line else {}
-    ok = (j.get("has_dev_otp") is False and j.get("sent") is False and j.get("has_error") is True)
-    report(2, "production guard (no dev_otp)", ok, f"-> {j}")
+    # P19 honesty contract: 502 + NO dev_otp + sent False + reason + Hindi detail
+    ok = (j.get("status") == 502 and j.get("has_dev_otp") is False and j.get("sent") is False
+          and j.get("reason") == "whatsapp-delivery-failed" and j.get("has_detail") is True)
+    report(2, "production guard (502 honesty, no dev_otp)", ok, f"-> {j}")
 except Exception as e:
     report(2, "production guard (no dev_otp)", False, f"EXC {e}")
 
