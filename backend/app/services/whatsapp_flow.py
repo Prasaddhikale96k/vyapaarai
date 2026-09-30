@@ -488,6 +488,14 @@ def _handle_audio(db, profile, incoming: dict, owner_id: int = 1) -> None:
         _reply(phone, apology)
         return
     lang = str((r or {}).get("language", "") or "hi").strip() or "hi"
+    # P20: REAL voice counter (WhatsApp STT success -> voice_logs row)
+    try:
+        from app.services import voice as _voice_mod
+
+        _voice_mod.log_voice_entry(db, owner_id=oid, duration_s=(r or {}).get("duration"),
+                                   language=lang, transcript=transcript)
+    except Exception:
+        pass
     try:
         if profile is not None:
             profile.language = lang

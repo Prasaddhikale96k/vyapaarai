@@ -1,7 +1,12 @@
-"""Seed story-locked demo data for Sharma Kirana Traders.
+"""OFFLINE TEST FIXTURE ONLY — NEVER RUN AGAINST THE LIVE DB (P20 NO-FAKE-DATA POLICY).
+
+Seed story-locked demo data for Sharma Kirana Traders. Verifies (verify_p15,
+scripts/e2e_all.py) run this against SCRATCH sqlite only. The live/demo database
+must contain ONLY real data entered through real flows (WhatsApp, grid, CSV,
+camera, connectors). To factory-reset live data, use scripts/reset_owner.py.
 
 Re-runnable: wipes all tables first. random.seed(7).
-Run:  python seed_demo_data.py   (from backend/)
+Run:  python seed_demo_data.py   (from backend/, scratch DBs only)
 """
 
 import random

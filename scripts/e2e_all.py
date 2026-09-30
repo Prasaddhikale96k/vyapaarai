@@ -249,13 +249,25 @@ try:
     asyncio.run(_synth())
     with open(VOICE_MP3, "rb") as f:
         vb = f.read()
+    from app.models import VoiceLog as _VL
+
+    dbv = _db()
+    try:
+        v0 = dbv.query(_VL).filter(_VL.owner_id == 1).count()
+    finally:
+        dbv.close()
     r = client.post("/chat/voice", files={"file": ("voice.mp3", vb, "audio/mpeg")},
                     data={"phone": "web"})
     j = r.json() if r.status_code == 200 else {}
+    dbv = _db()
+    try:
+        v1 = dbv.query(_VL).filter(_VL.owner_id == 1).count()
+    finally:
+        dbv.close()
     ok = (r.status_code == 200 and bool(str(j.get("transcript", "")).strip())
-          and bool(j.get("answer")))
+          and bool(j.get("answer")) and v1 == v0 + 1)
     report("voice full loop (synth->stt->answer)", "pass" if ok else "fail",
-           f"-> {r.status_code} transcript={str(j.get('transcript',''))[:60]!r}")
+           f"-> {r.status_code} transcript={str(j.get('transcript',''))[:60]!r} voice_logs {v0}->{v1}")
 except Exception as e:
     report("voice full loop (synth->stt->answer)", "skip", f"SKIP edge-tts/STT unavailable: {str(e)[:120]}")
 

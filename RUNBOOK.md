@@ -1,4 +1,14 @@
-# VyapaarAI — RUNBOOK (P15)
+# VyapaarAI — RUNBOOK (P20)
+
+## NO-FAKE-DATA POLICY (OWNER LAW)
+- The live/demo database contains ONLY real data entered through real flows
+  (WhatsApp photo/voice/text, Direct Entry grid, CSV, camera Scan Bill, connectors).
+- `backend/seed_demo_data.py` is an OFFLINE TEST FIXTURE ONLY — verifies run it
+  on scratch sqlite. NEVER run it against the live DB.
+- Factory reset: `cd backend && python ../scripts/reset_owner.py --phone <digits> [--wipe-business yes]`
+  (wipe prints per-table counts, idempotent). Then re-onboard via /register + WhatsApp OTP.
+- Landing numbers come from live `GET /public/stats`; zeros render qualitative
+  zero-state lines (no fake numbers, ever).
 
 ## ROLE MODEL (FINEL — owner-stated)
 

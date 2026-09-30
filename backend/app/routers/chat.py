@@ -177,13 +177,23 @@ async def chat_voice(
         transcript = str((r or {}).get("text", "") or "").strip()
         lang = str((r or {}).get("language", "") or "hi").strip() or "hi"
         stt_err = str((r or {}).get("error", "") or "")
+        try:
+            dur = (r or {}).get("duration")
+        except Exception:
+            dur = None
     except Exception:
-        transcript, lang, stt_err = "", "hi", ""
+        transcript, lang, stt_err, dur = "", "hi", "", None
     if not transcript:
         raise HTTPException(
             status_code=422,
             detail=stt_err or "Kuch sunai nahi diya — mic paas rakho, dobara bolo 🎤",
         )
+    # P20: REAL voice counter (STT success -> voice_logs row for landing truth)
+    try:
+        voice_mod.log_voice_entry(db, owner_id=oid, duration_s=dur,
+                                  language=lang, transcript=transcript)
+    except Exception:
+        pass
     try:
         from app.services import agents as ag
 

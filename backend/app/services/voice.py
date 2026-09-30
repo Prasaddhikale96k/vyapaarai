@@ -224,6 +224,32 @@ def stt(audio_bytes: bytes, suffix: str = ".ogg") -> dict:
         return {"text": "", "language": "hi", "error": str(exc)[:300]}
 
 
+def log_voice_entry(db, owner_id: int = 1, duration_s=None, language: str = "hi",
+                    transcript: str = "") -> None:
+    """P20 REAL voice counter: one voice_logs row per successful STT.
+    Best-effort, never raises — landing counts come from this table."""
+    try:
+        from app.models import VoiceLog
+
+        try:
+            oid = int(owner_id or 1)
+        except Exception:
+            oid = 1
+        try:
+            dur = int(round(float(duration_s))) if duration_s else 0
+        except Exception:
+            dur = 0
+        db.add(VoiceLog(owner_id=oid, duration_s=dur,
+                        language=str(language or "hi")[:8] or "hi",
+                        transcript=str(transcript or "")[:2000]))
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 def tts(text: str, language: str | None = None) -> bytes | None:
     """Text-to-speech via edge-tts. Returns mp3 bytes or None. Never raises."""
     try:
