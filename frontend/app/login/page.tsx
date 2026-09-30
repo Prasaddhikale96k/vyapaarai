@@ -3,7 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { KeyRound, Phone } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +18,17 @@ export default function LoginPage() {
   const [hint, setHint] = useState("");
   const [pendingNote, setPendingNote] = useState("");
   const reduce = useReducedMotion();
+
+  // P19: ?phone= deep-link prefill (e.g. from register OTP step)
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("phone") || "";
+      const d = q.replace(/\D/g, "");
+      if (d.length >= 10) setPhone(d);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   async function requestOtp() {
     const digits = phone.replace(/\D/g, "");

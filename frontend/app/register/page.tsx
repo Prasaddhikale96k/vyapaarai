@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, setToken } from "@/lib/api";
 
 const BUSINESS_TYPES: { code: string; label: string }[] = [
   { code: "kirana", label: "Kirana / General Store" },
@@ -38,21 +38,6 @@ interface LookupHit {
   business_type: string;
 }
 
-function Hourglass() {
-  return (
-    <svg viewBox="0 0 64 80" width="72" height="90" fill="none">
-      <motion.g
-        animate={{ rotate: [0, 0, 180, 180, 360] }}
-        transition={{ repeat: Infinity, duration: 6, times: [0, 0.35, 0.5, 0.85, 1] }}
-        style={{ transformOrigin: "32px 40px" }}
-      >
-        <path d="M14 6 h36 M14 74 h36 M18 6 C 18 30, 46 30, 46 40 C 46 50, 18 50, 18 74" stroke="var(--marigold)" strokeWidth="3" strokeLinecap="round" />
-        <motion.circle cx="32" cy="26" r="3" fill="var(--marigold)" animate={{ cy: [26, 52] }} transition={{ repeat: Infinity, duration: 3 }} />
-      </motion.g>
-    </svg>
-  );
-}
-
 export default function RegisterPage() {
   const [form, setForm] = useState({
     phone: "",
@@ -65,6 +50,13 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  // P19: same-page OTP step (number pre-filled, no /login hop needed)
+  const [otpPhone, setOtpPhone] = useState<string | null>(null);
+  const [otp, setOtp] = useState("");
+  const [otpErr, setOtpErr] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpFails, setOtpFails] = useState(0);
+  const [cooldown, setCooldown] = useState(0);
   const [lookupQ, setLookupQ] = useState("");
   const [lookupHits, setLookupHits] = useState<LookupHit[]>([]);
   const [lookupBusy, setLookupBusy] = useState(false);
@@ -145,10 +137,16 @@ export default function RegisterPage() {
     }
     setBusy(true);
     try {
+      const digits = form.phone.replace(/\D/g, "");
       const r = await apiFetch<{ status: string; message: string }>("/auth/register", {
         method: "POST",
         body: JSON.stringify(form),
       });
+      if (r.status === "pending") {
+        // P19: seedha OTP step — OTP request karo aur same page par verify
+        await requestOtp(digits, true);
+        return;
+      }
       setDone(r.message || "✅ Number note ho gaya — ab Login par OTP verify karo");
       toast.success("Request mil gayi ✅");
     } catch (e) {
@@ -161,6 +159,68 @@ export default function RegisterPage() {
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const maskPhone = (digits: string) => {
+    const d = digits.replace(/\D/g, "");
+    if (d.length <= 4) return d;
+    return `${d.slice(0, 2)}${"*".repeat(d.length - 4)}${d.slice(-2)}`;
+  };
+
+  const requestOtp = async (digits: string, silent = false) => {
+    setOtpErr("");
+    try {
+      const r = await apiFetch<{ sent: boolean; dev_otp?: string; reason?: string }>("/auth/otp/request", {
+        method: "POST",
+        body: JSON.stringify({ phone: digits }),
+      });
+      setOtpPhone(digits);
+      setOtp("");
+      setOtpFails(0);
+      setCooldown(30);
+      if (!silent) toast.success("OTP dobara bheja ✅");
+      if (r?.dev_otp) toast.success(`Dev OTP: ${r.dev_otp}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "OTP nahi bheja gaya";
+      // P19 honesty: 502 delivery-fail / 403 suspended — OTP card par dikhao, retry do
+      setOtpPhone(digits);
+      setOtpErr(msg);
+    }
+  };
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const verifyOtp = async () => {
+    if (!otpPhone) return;
+    if (otp.replace(/\D/g, "").length !== 6) {
+      setOtpErr("6-digit OTP daalo");
+      return;
+    }
+    setOtpBusy(true);
+    setOtpErr("");
+    try {
+      const r = await apiFetch<{ token: string }>("/auth/otp/verify", {
+        method: "POST",
+        body: JSON.stringify({ phone: otpPhone, code: otp.trim() }),
+      });
+      setToken(r.token);
+      toast.success("Account active — shuru karo 🎉");
+      window.location.href = "/app";
+    } catch (e) {
+      const n = otpFails + 1;
+      setOtpFails(n);
+      setOtpErr(
+        n >= 3
+          ? "3 baar galat — neeche Resend dabao aur naya OTP lo"
+          : (e instanceof Error ? e.message : "OTP galat hai")
+      );
+    } finally {
+      setOtpBusy(false);
     }
   };
 
@@ -180,7 +240,46 @@ export default function RegisterPage() {
           ← VyapaarAI
         </Link>
         <div className="card space-y-4 p-6">
-          {!done ? (
+          {otpPhone ? (
+            <>
+              <div>
+                <h1 className="font-display text-2xl font-bold">OTP verify karo 🔐</h1>
+                <p className="card-sub mt-1">
+                  {maskPhone(otpPhone)} par OTP WhatsApp pe bheja gaya — daalo aur shuru karo.
+                </p>
+              </div>
+              <div>
+                <label htmlFor="reg-otp" className="mb-1 block text-sm font-semibold">6-digit OTP</label>
+                <input id="reg-otp" className={inputCls} style={{ borderColor: "var(--card-border)" }} placeholder="123456" value={otp} onChange={(e) => setOtp(e.target.value)} inputMode="numeric" maxLength={6} autoComplete="one-time-code" />
+                {otpErr && <p className={errCls} style={errStyle}>{otpErr}</p>}
+              </div>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={verifyOtp} disabled={otpBusy} className="btn-primary w-full disabled:opacity-50">
+                {otpBusy ? "Check ho raha…" : "Verify & Shuru karo"}
+              </motion.button>
+              <div className="flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  disabled={cooldown > 0 || otpBusy}
+                  onClick={() => requestOtp(otpPhone)}
+                  className="font-semibold disabled:opacity-50"
+                  style={{ color: "var(--accent)" }}
+                >
+                  {cooldown > 0 ? `Resend (${cooldown}s)` : "OTP dobara bhejo"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setOtpPhone(null); setOtp(""); setOtpErr(""); }}
+                  className="font-semibold"
+                  style={{ color: "var(--ink-soft)" }}
+                >
+                  Number galat? Badlo
+                </button>
+              </div>
+              <p className="text-center text-xs" style={{ color: "var(--ink-soft)" }}>
+                Already active? <Link href={`/login?phone=${encodeURIComponent(otpPhone)}`} style={{ color: "var(--accent)" }} className="font-semibold">Login →</Link>
+              </p>
+            </>
+          ) : !done ? (
             <>
               <div>
                 <h1 className="font-display text-2xl font-bold">Dukaan register karo 📝</h1>
@@ -259,25 +358,11 @@ export default function RegisterPage() {
                 Already registered? <Link href="/login" style={{ color: "var(--accent)" }} className="font-semibold">Login karo →</Link>
               </p>
             </>
-          ) : done.startsWith("ALREADY:") ? (
+          ) : (
             <div className="text-center">
               <p className="text-sm font-semibold">{done.slice(8)}</p>
               <Link href="/login" className="btn-primary mt-4 inline-block" style={{ textDecoration: "none" }}>
                 Login karo →
-              </Link>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center py-4 text-center">
-              <Hourglass />
-              <h2 className="font-display mt-3 text-xl font-bold">Number note ho gaya! ✅</h2>
-              <p className="card-sub mt-1">{done}</p>
-              <div className="mt-3 w-full space-y-1.5 text-left text-sm">
-                <p className="flex items-start gap-2"><span>1️⃣</span> Login page par OTP verify karo</p>
-                <p className="flex items-start gap-2"><span>2️⃣</span> Account turant active — koi wait nahi</p>
-                <p className="flex items-start gap-2"><span>3️⃣</span> Data WhatsApp par bhej dijiye — bas!</p>
-              </div>
-              <Link href="/login" className="btn-ghost mt-4 inline-block" style={{ textDecoration: "none" }}>
-                Login page
               </Link>
             </div>
           )}
