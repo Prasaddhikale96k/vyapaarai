@@ -517,6 +517,13 @@ Live/demo DB = ONLY real data via real flows. `seed_demo_data.py` = OFFLINE TEST
 1. Stop backend + openwa. 2. `cd backend && python ../scripts/reset_owner.py --phone 919834854511 --wipe-business yes` (expect: profile + business rows removed, counts printed). 3. Delete OpenWA session folder → `openwa_start.cmd` → `setup_whatsapp.py` → NEW QR → old-SIM scan → `/whatsapp/status` connected. 4. `/register` 919834854511 → same-page OTP → arrives on WA → verify → `/app` EMPTY (correct). 5. Real bills/photos/voice via WA + grid/CSV/camera — no seed, ever. 6. Landing zeros → real counts; screenshot both states.
 - STATUS: steps 1–6 need the human at the keyboard with both phones. NOT executed yet — wiping live business rows without the human ready would strand the demo with no path back (seed banned). Awaiting confirmation.
 
+### PH3 EXECUTION (2026-09-30, owner-confirmed "wipe now")
+- Reset drill found the live PG held TWO identities for the owner number: id=7 (`9834854511`, empty, owner's real registration) + id=1 (`919834854511`, all seed-era business data). First run deleted id=7 (0 business rows) — then a **matcher bug** surfaced: variant `.first()` picked id=7 over id=1. Fixed: exact-digit match first, refuse + list on ambiguity (`b1b1bcf`).
+- Second run wiped id=1: **sales 1531, inventory 18, receivables 10, expenses 186, actions 10, ingestion_logs 5, chat 24, contacts 8, customers 9, products 19** + profile deleted.
+- Verify-junk profiles deleted by explicit id (9): 919812345678, 919999999999 ("profit kyun gira?" business_name — chat text had leaked into registration), 919000000099/98, 8888888888, 917777777777, 6666666666, 666684201, 666692885. Live `owner_profiles` now EMPTY.
+- Backend restarted; live `GET /public/stats` → `{overdue:0.0, low:0, voice:0, health:71, biz:""}` — zero-state PROVEN on the live endpoint. (health 71 = engine empty-DB default; zero-state `live` flag now keys on data counters only, `6f09730`.)
+- REMAINING (human): OpenWA session delete → `openwa_start.cmd` → `setup_whatsapp.py` → NEW QR → old-SIM scan → `/register` 919834854511 → OTP on WA → verify → EMPTY `/app` → real bills/photos/voice → stats move → screenshot both landing states.
+
 ### PH4 — sweep (P20 close, pre-reset)
 - e2e **41/41 GREEN** (fixture sqlite) · p125 **6/6** · p15 **9/9** · p3 **9/9** · tsc clean · build green.
 - Zero-state landing: code-verified (live=false → qualitative lines, no numerals); browser screenshot-proof deferred to post-reset human pass (both states).
