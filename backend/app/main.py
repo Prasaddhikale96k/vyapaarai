@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app import config as _cfg
 from app.limits import limiter
 from app.db import Base, engine, ensure_access_schema, ensure_chat_thread_schema, ensure_contacts_schema, ensure_p4_schema, ensure_p15_schema, ensure_prod_schema
-from app.routers import actions, auth, chat, connectors, contacts, data, documents, ingest, intelligence, reports, whatsapp
+from app.routers import actions, auth, chat, connectors, contacts, data, documents, ingest, intelligence, public, reports, whatsapp
 from app.services.sync import start_watchers, startup_scan, stop_watchers
 
 # Import models so metadata is populated before create_all
@@ -186,6 +186,7 @@ app.include_router(auth.router)
 app.include_router(whatsapp.router)
 app.include_router(connectors.router)
 app.include_router(contacts.router)
+app.include_router(public.router)
 
 
 @app.get("/health")

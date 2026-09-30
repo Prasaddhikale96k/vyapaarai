@@ -12,6 +12,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { formatIN, useCountUp, useInViewOnce } from "@/hooks/useCountUp";
+import { usePublicStats } from "@/lib/usePublicStats";
 import { EASE_EXPO, prefersReduced } from "./gsap-setup";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -20,7 +21,7 @@ const HealthChart = dynamic(() => import("./HealthChart"), {
   ssr: false,
   loading: () => (
     <p className="py-8 text-center text-sm" style={{ color: "rgba(253,250,244,0.7)" }}>
-      Business health score improved from 44 to 88 over 12 weeks.
+      Sample preview of the health trend chart.
     </p>
   ),
 });
@@ -111,9 +112,31 @@ function Stat({
   );
 }
 
+function ZeroStat({ icon, line, color }: { icon: React.ReactNode; line: string; color: string }) {
+  // P20 zero-state: qualitative line, NO numbers (same card typography).
+  return (
+    <div
+      data-gsap="stat"
+      className="rounded-2xl border p-6 text-center transition-colors"
+      style={{ background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.1)" }}
+    >
+      <div className="mx-auto w-fit" aria-hidden="true">{icon}</div>
+      <p className="font-display mt-2 text-xl font-bold leading-snug" style={{ color }}>
+        {line}
+      </p>
+    </div>
+  );
+}
+
 export default function DemoNumbers() {
   const root = useRef<HTMLElement>(null);
   const [gridRef, started] = useInViewOnce<HTMLDivElement>(0.3);
+  // P20 truth engine: live DB numbers; loading/all-zero -> zero-state lines.
+  const { stats, live } = usePublicStats();
+  const overdue = stats?.overdue_total ?? 0;
+  const health = stats?.health_now ?? 0;
+  const lowSkus = stats?.low_stock_count ?? 0;
+  const voice = stats?.voice_entries ?? 0;
 
   useGSAP(
     () => {
@@ -147,26 +170,40 @@ export default function DemoNumbers() {
           Like Sharma Kirana Traders in our demo: 30 days on VyapaarAI. Here&apos;s what happened.
         </p>
         <div ref={gridRef} className="mt-10 grid grid-cols-2 gap-6 lg:grid-cols-3">
-          <Stat icon={<RupeeIcon />} from={0} to={53400} format={(v) => `₹${formatIN(v)}`} label="Overdue Udhaari Detected" color="#E0604F" started={started} />
-          <Stat icon={<PulseIcon />} from={44} to={88} holdFrom={44} format={(v) => `44 → ${Math.round(v)}`} label="Health Score Improvement" color="#4CAF7D" started={started} />
-          <Stat icon={<BoxIcon />} from={0} to={18} format={(v) => `${Math.round(v)} SKUs`} label="Low-Stock Items Flagged" color="#D4A017" started={started} />
-          <Stat icon={<MicIcon />} from={0} to={2847} format={(v) => formatIN(v)} label="Voice Entries Processed" color="#E8771A" started={started} />
+          {live ? (
+            <>
+              <Stat icon={<RupeeIcon />} from={0} to={overdue} format={(v) => `₹${formatIN(v)}`} label="Overdue Udhaari Tracked" color="#E0604F" started={started} />
+              <Stat icon={<PulseIcon />} from={0} to={health} format={(v) => `${Math.round(v)}`} label="Live Health Score" color="#4CAF7D" started={started} />
+              <Stat icon={<BoxIcon />} from={0} to={lowSkus} format={(v) => `${Math.round(v)} SKUs`} label="Low-Stock Items Flagged" color="#D4A017" started={started} />
+              <Stat icon={<MicIcon />} from={0} to={voice} format={(v) => formatIN(v)} label="Voice Entries Counted" color="#E8771A" started={started} />
+            </>
+          ) : (
+            <>
+              <ZeroStat icon={<RupeeIcon />} line="Overdue udhaari, caught before it becomes loss." color="#E0604F" />
+              <ZeroStat icon={<PulseIcon />} line="Business health, scored live from your ledger." color="#4CAF7D" />
+              <ZeroStat icon={<BoxIcon />} line="Low stock flagged before the shelf goes empty." color="#D4A017" />
+              <ZeroStat icon={<MicIcon />} line="Every voice note, counted." color="#E8771A" />
+            </>
+          )}
           <Stat icon={<DiyaIcon />} from={1} to={1.6} format={(v) => `×${v.toFixed(1)}`} label="Diwali Demand Boost Forecast" color="#D4A017" started={started} />
           <Stat icon={<PhoneCheckIcon />} from={0} to={0} format={() => "₹0"} label="App Install Required" color="#4CAF7D" started={started} />
         </div>
         <div className="mt-10 rounded-2xl border p-6" style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.1)" }}>
           <p className="mb-4 text-sm font-medium" style={{ color: "rgba(253,250,244,0.7)" }}>
-            Business Health Score — Sharma Kirana Traders (Last 12 Weeks)
+            Business Health Trend — Sample Preview
           </p>
           <Suspense
             fallback={
               <p className="py-8 text-center text-sm" style={{ color: "rgba(253,250,244,0.7)" }}>
-                Business health score improved from 44 to 88 over 12 weeks.
+                Sample preview of the health trend chart.
               </p>
             }
           >
             <HealthChart />
           </Suspense>
+          <p className="mt-3 text-xs" style={{ color: "rgba(253,250,244,0.5)" }}>
+            Sample preview — your live trend appears here once entries land.
+          </p>
         </div>
       </div>
     </section>
