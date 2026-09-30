@@ -37,12 +37,13 @@ export function usePublicStats() {
     };
   }, []);
 
+  // P20: live = real DATA exists (overdue/low/voice). health_now on an empty
+  // DB is the engine's neutral default, not a measurement — excluded.
   const live =
     !loading &&
     !!stats &&
     (stats.overdue_total > 0 ||
       stats.low_stock_count > 0 ||
-      stats.voice_entries > 0 ||
-      stats.health_now > 0);
+      stats.voice_entries > 0);
   return { stats, loading, live };
 }
