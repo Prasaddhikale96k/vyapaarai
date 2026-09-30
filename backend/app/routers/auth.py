@@ -8,6 +8,7 @@ from typing import Optional
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -151,6 +152,8 @@ def get_current_owner(
         prof = None
     if prof is None or not bool(getattr(prof, "allowed", False)):
         raise HTTPException(status_code=401, detail="Account active nahi hai")
+    if bool(getattr(prof, "blocked", False)):
+        raise HTTPException(status_code=401, detail="Account suspended hai — ops se sampark karo")
     return prof
 
 
@@ -168,6 +171,8 @@ def get_optional_owner(
 
         prof = db.query(OwnerProfile).filter(OwnerProfile.id == oid).first()
         if prof is None or not bool(getattr(prof, "allowed", False)):
+            return None
+        if bool(getattr(prof, "blocked", False)):
             return None
         return prof
     except Exception:
@@ -200,12 +205,18 @@ def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)
     if prof is not None:
         phone = str(getattr(prof, "phone", "") or "") or phone
     if prof is None:
-        # one-shot P1: OTP = onboarding — unknown number gets honest 403, but
-        # an existing (even inactive) profile may always request an OTP
+        # P19 gate model: UNKNOWN -> register first (OTP is for registered numbers)
         raise HTTPException(
             status_code=403,
             detail="Ye number registered nahi hai — pehle /register karo ya WhatsApp par 'hi' bhejo",
         )
+    if bool(getattr(prof, "blocked", False)):
+        # P19: ops-suspended -> no OTP, ops contact only
+        raise HTTPException(
+            status_code=403,
+            detail="Account suspended hai — ops se sampark karo",
+        )
+    # REGISTERED (allowed False OR True) -> always proceed: OTP=onboarding
     code = "%06d" % random.randint(0, 999999)
     try:
         prof.otp_code = code
@@ -218,16 +229,33 @@ def otp_request(request: Request, req: OtpRequest, db: Session = Depends(get_db)
         except Exception:
             pass
         raise HTTPException(status_code=500, detail="OTP bana nahi paya")
+    # P19 DELIVERY HONESTY: send, retry ONCE on failure; prod never leaks code
     sent = _send_login_otp(phone, code)
+    if not sent:
+        try:
+            import time as _time
+
+            _time.sleep(2)
+        except Exception:
+            pass
+        sent = _send_login_otp(phone, code)
+    try:
+        rid = getattr(getattr(request, "state", None), "request_id", "") or ""
+    except Exception:
+        rid = ""
     out = {"sent": bool(sent)}
     if not sent:
         if _is_dev():
             out["sent"] = True
             out["dev_otp"] = code
         else:
-            # P15: production me dev_otp KABHI nahi — honest failure with message
-            out["sent"] = False
-            out["error"] = f"OTP WhatsApp par nahi bheja ja saka — bridge ({_bridge_label()}) check karo"
+            # production me dev_otp KABHI nahi — honest 502 with reason, code never included
+            logger.warning("otp delivery failed rid=%s phone=***%s", rid, phone[-4:])
+            return JSONResponse(
+                status_code=502,
+                content={"sent": False, "reason": "whatsapp-delivery-failed",
+                         "detail": "WhatsApp pe OTP delivery fail hua — 30s baad dobara try karo"},
+            )
     return out
 
 
@@ -240,6 +268,8 @@ def otp_verify(req: OtpVerify, db: Session = Depends(get_db)):
         phone = str(getattr(prof, "phone", "") or "") or phone
     if prof is None:
         raise HTTPException(status_code=401, detail="Galat number ya OTP")
+    if bool(getattr(prof, "blocked", False)):
+        raise HTTPException(status_code=401, detail="Account suspended hai — ops se sampark karo")
     try:
         exp = getattr(prof, "otp_expires_at", None)
         expired = exp is None or datetime.utcnow() > exp

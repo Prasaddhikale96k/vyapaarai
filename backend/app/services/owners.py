@@ -373,6 +373,8 @@ def verify_otp(db, phone: str, code: str) -> dict:
         prof = get_profile(db, phone)
         if prof is None or str(getattr(prof, "reg_step", "") or "") != "OTP":
             return {"reply": "Pehle registration shuru karein — apna NAAM bhejiye 🙏"}
+        if bool(getattr(prof, "blocked", False)):
+            return {"reply": "⛔ Account suspended hai — ops se sampark karein."}
         if bool(getattr(prof, "allowed", False)):
             return {"reply": "Aap already registered hain ✅", "profile": prof}
         try:
@@ -434,7 +436,7 @@ def verify_otp(db, phone: str, code: str) -> dict:
 
 
 def approve_owner(db, owner_id: int) -> dict:
-    """Ops override restore: allowed=True + WhatsApp pe ACTIVE message. Hamesha dict."""
+    """Ops override restore: blocked=False (+allowed=True) + WhatsApp ACTIVE message."""
     try:
         from app.models import OwnerProfile
 
@@ -442,6 +444,10 @@ def approve_owner(db, owner_id: int) -> dict:
         if prof is None:
             return {"ok": False, "error": "Owner nahi mila."}
         prof.allowed = True
+        try:
+            prof.blocked = False
+        except Exception:
+            pass
         prof.reg_step = None
         _save(db)
         msg = "🎉 Account ACTIVE! Ab data bhejiye: current stock list (CSV/PDF/photo) ya likh ke batayiye."
@@ -457,21 +463,24 @@ def approve_owner(db, owner_id: int) -> dict:
 
 
 def reject_owner(db, owner_id: int) -> dict:
-    """Ops override suspend: allowed=False + polite WhatsApp message."""
+    """Ops override suspend: blocked=True (allowed untouched — onboarding flag)."""
     try:
         from app.models import OwnerProfile
 
         prof = db.query(OwnerProfile).filter(OwnerProfile.id == int(owner_id)).first()
         if prof is None:
             return {"ok": False, "error": "Owner nahi mila."}
-        prof.allowed = False
+        try:
+            prof.blocked = True
+        except Exception:
+            pass
         _save(db)
         try:
             from app.services import notify as _notify
 
             _notify.send_text(
                 str(getattr(prof, "phone", "") or ""),
-                "🙏 Maaf kijiye, aapka VyapaarAI request approve nahi ho paya. Details ke liye dukaan malik se sampark karein.",
+                "⛔ Aapka VyapaarAI account ops ne suspend kiya hai. Bahali ke liye ops se sampark karein.",
             )
         except Exception as exc:
             logger.info("reject notify failed: %s", str(exc)[:200])
@@ -490,6 +499,7 @@ def serialize_owner(prof) -> dict:
             "business_type": getattr(prof, "business_type", "") or "",
             "language": getattr(prof, "language", "hi") or "hi",
             "allowed": bool(getattr(prof, "allowed", False)),
+            "blocked": bool(getattr(prof, "blocked", False)),
             "onboarded": bool(getattr(prof, "onboarded", False)),
             "distributor_phone": getattr(prof, "distributor_phone", ""),
             "distributors": _get_distributors(prof),

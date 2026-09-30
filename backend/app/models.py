@@ -173,6 +173,8 @@ class OwnerProfile(Base):
     # --- Phase A access control ---
     allowed = Column(Boolean, default=False, nullable=False)
     onboarded = Column(Boolean, default=False, nullable=False)
+    # --- P19: ops suspension (distinct from allowed=onboarding flag) ---
+    blocked = Column(Boolean, default=False, nullable=False)
     distributor_phone = Column(String(32), nullable=True)
     reg_step = Column(String(16), nullable=True)  # NAME|BUSINESS|CATEGORY|DISTRIBUTOR|LANGUAGE|OTP
     otp_code = Column(String(16), nullable=True)

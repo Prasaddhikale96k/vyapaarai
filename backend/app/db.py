@@ -189,6 +189,7 @@ def ensure_p15_schema() -> None:
             "business_type": "VARCHAR(32)",
             "distributors": "TEXT",
             "nudge_sent_at": "TIMESTAMP",
+            "blocked": "BOOLEAN DEFAULT 0" if is_sqlite else "BOOLEAN DEFAULT FALSE",
         }
         with engine.connect() as conn:
             if is_sqlite:

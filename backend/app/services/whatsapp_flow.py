@@ -574,6 +574,17 @@ def handle_incoming(payload: dict) -> None:
             except Exception:
                 profile = None
 
+            # ---- GATE 1a: ops-suspended profile -> no flows, ops contact only ----
+            try:
+                _blocked = bool(getattr(profile, "blocked", False)) if profile is not None else False
+            except Exception:
+                _blocked = False
+            if _blocked:
+                try:
+                    _reply(phone, "⛔ Account suspended hai — ops se sampark karein.")
+                except Exception:
+                    pass
+                return
             # ---- GATE 1: unknown number OR registration in progress ----
             needs_reg = False
             try:
