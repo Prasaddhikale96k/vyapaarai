@@ -57,7 +57,14 @@ def main() -> int:
             cands.append(stripped)
         if len(stripped) == 10 and ("91" + stripped) not in cands:
             cands.append("91" + stripped)
-        prof = db.query(OwnerProfile).filter(OwnerProfile.phone.in_(cands)).first()
+        prof = db.query(OwnerProfile).filter(OwnerProfile.phone == digits).first()
+        if prof is None:
+            dupes = db.query(OwnerProfile).filter(OwnerProfile.phone.in_(cands)).all()
+            if len(dupes) > 1:
+                print("REFUSED: multiple variant rows match "
+                      f"{digits}: {[(p.id, p.phone) for p in dupes]} — clean manually", flush=True)
+                return 2
+            prof = dupes[0] if dupes else None
         if prof is None:
             print(f"owner not found for {digits} — nothing to do (idempotent ok)", flush=True)
             return 0
