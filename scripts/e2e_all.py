@@ -160,6 +160,52 @@ except Exception as e:
     report("auth wrong OTP 401", "fail", f"EXC {e}")
 
 try:
+    r = client.post("/auth/otp/request", json={"phone": "919800000999"})
+    try:
+        hint = "register" in str(r.json().get("detail", "")).lower()
+    except Exception:
+        hint = False
+    ok = r.status_code == 403 and hint
+    report("auth unknown 403 + register hint", "pass" if ok else "fail",
+           f"-> {r.status_code} hint={hint}")
+except Exception as e:
+    report("auth unknown 403 + register hint", "fail", f"EXC {e}")
+
+try:
+    from app.models import OwnerProfile
+
+    BLK = "919820000007"
+    db = _db()
+    try:
+        old = db.query(OwnerProfile).filter(OwnerProfile.phone == BLK).first()
+        if old is not None:
+            db.delete(old)
+            db.commit()
+        db.add(OwnerProfile(phone=BLK, name="E2E Blocked", allowed=True,
+                            onboarded=False, blocked=True))
+        db.commit()
+    finally:
+        db.close()
+    r = client.post("/auth/otp/request", json={"phone": BLK})
+    try:
+        susp = "suspend" in str(r.json().get("detail", "")).lower()
+    except Exception:
+        susp = False
+    ok = r.status_code == 403 and susp
+    report("auth blocked 403 suspended", "pass" if ok else "fail",
+           f"-> {r.status_code} susp={susp}")
+    db = _db()
+    try:
+        old = db.query(OwnerProfile).filter(OwnerProfile.phone == BLK).first()
+        if old is not None:
+            db.delete(old)
+            db.commit()
+    finally:
+        db.close()
+except Exception as e:
+    report("auth blocked 403 suspended", "fail", f"EXC {e}")
+
+try:
     r = client.post("/auth/otp/request", json={"phone": OWNER_PHONE})
     ow_dev = r.json().get("dev_otp", "")
     r2 = client.post("/auth/otp/verify", json={"phone": OWNER_PHONE, "code": ow_dev})
