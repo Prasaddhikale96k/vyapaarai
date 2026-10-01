@@ -38,6 +38,87 @@ export default function KiranaShopSVG() {
     () => {
       if (prefersReduced()) return;
       const q = gsap.utils.selector(root.current);
+      const cleanups: Array<() => void> = [];
+      
+      // --- Phase 1: Ambient SVG Idle Loops ---
+      
+      // 1. Signboard gentle pendulum sway
+      gsap.to(q('.stall-board'), {
+        rotation: 1.2,
+        duration: 3.2,
+        ease: "sine.inOut",
+        yoyo: true,
+        repeat: -1,
+        transformOrigin: "top center",
+      });
+      
+      // 2. Shopkeeper breathing + eye blink
+      gsap.to(q('.shopkeeper-body'), {
+        y: -2.5,
+        duration: 2.2,
+        ease: "sine.inOut",
+        yoyo: true,
+        repeat: -1,
+      });
+      gsap.to(q('.shopkeeper-head'), {
+        y: -2.5,
+        duration: 2.2,
+        ease: "sine.inOut",
+        yoyo: true,
+        repeat: -1,
+      });
+      // Eye blink - scale Y to near-zero
+      q('.shopkeeper-eye').forEach((eye) => {
+        gsap.to(eye as Element, {
+          scaleY: 0.1,
+          duration: 0.12,
+          repeat: -1,
+          repeatDelay: 3.5,
+          ease: "power2.inOut",
+          transformOrigin: "center",
+        });
+      });
+      
+      // 3. WhatsApp phone radar pulse
+      q('.phone-pulse-ring').forEach((ring, i) => {
+        gsap.fromTo(ring as Element,
+          { scale: 1, opacity: 0.6 },
+          {
+            scale: 1.45,
+            opacity: 0,
+            duration: 2,
+            ease: "power1.out",
+            repeat: -1,
+            delay: i * 0.75,
+            transformOrigin: "center",
+          }
+        );
+      });
+      
+      // 4. Digital aura - floating ledger dots
+      q('.ledger-dot').forEach((dot, i) => {
+        gsap.to(dot as Element, {
+          y: -25,
+          opacity: 0,
+          duration: 1.8,
+          ease: "power1.inOut",
+          repeat: -1,
+          delay: i * 0.8,
+        });
+      });
+      
+      // 5. Jar/shelf ambient shimmer
+      q('.jar-shimmer').forEach((shimmer, i) => {
+        gsap.to(shimmer as Element, {
+          x: 100,
+          duration: 6,
+          ease: "none",
+          repeat: -1,
+          delay: i * 2,
+        });
+      });
+      
+      // --- Existing slide-in animation ---
       const tl = gsap.timeline({
         defaults: { ease: EASE_EXPO },
         scrollTrigger: { trigger: root.current, start: "top 95%", once: true },
@@ -64,6 +145,8 @@ export default function KiranaShopSVG() {
           ease: "sine.inOut",
         });
       });
+      
+      return () => cleanups.forEach((fn) => fn());
     },
     { scope: root }
   );
@@ -91,35 +174,52 @@ export default function KiranaShopSVG() {
             />
           ))}
         </g>
-        {/* shop sign */}
-        <g transform="rotate(-2 250 92)">
+        {/* shop sign - pendulum sway target */}
+        <g className="stall-board" transform="rotate(-2 250 92)">
           <rect x="160" y="74" width="180" height="36" rx="6" fill="#0F2040" />
           <text x="250" y="98" textAnchor="middle" fontSize="17" fill="#FDFAF4" fontFamily="Georgia, serif" fontWeight="bold">
             Sharma Kirana
           </text>
         </g>
-        {/* shelves with jars */}
+        {/* shelves with jars - shimmer targets */}
         {[0, 1, 2].map((row) => (
           <g key={row}>
             <rect x="70" y={128 + row * 34} width="150" height="6" rx="3" fill="#8B6914" />
             {[0, 1, 2, 3].map((i) => (
               <g key={i}>
                 {i % 2 === 0 ? (
-                  <circle cx={88 + i * 36} cy={118 + row * 34} r="9" fill={["#E8771A", "#D4A017", "#2D6A4F", "#C0392B"][ (row + i) % 4 ]} opacity="0.85" />
+                  <circle 
+                    className="jar-shimmer"
+                    cx={88 + i * 36} 
+                    cy={118 + row * 34} 
+                    r="9" 
+                    fill={["#E8771A", "#D4A017", "#2D6A4F", "#C0392B"][ (row + i) % 4 ]} 
+                    opacity="0.85" 
+                  />
                 ) : (
-                  <rect x={80 + i * 36} y={106 + row * 34} width="16" height="22" rx="3" fill={["#FFF3E0", "#E8DDD0", "#FFF8E1", "#DCF8C6"][ (row + i) % 4 ]} stroke="#8B7355" strokeWidth="1.5" />
+                  <rect 
+                    className="jar-shimmer"
+                    x={80 + i * 36} 
+                    y={106 + row * 34} 
+                    width="16" 
+                    height="22" 
+                    rx="3" 
+                    fill={["#FFF3E0", "#E8DDD0", "#FFF8E1", "#DCF8C6"][ (row + i) % 4 ]} 
+                    stroke="#8B7355" 
+                    strokeWidth="1.5" 
+                  />
                 )}
               </g>
             ))}
           </g>
         ))}
-        {/* shopkeeper */}
-        <g>
-          <circle cx="392" cy="150" r="20" fill="#4A3728" />
+        {/* shopkeeper - breathing + blink targets */}
+        <g className="shopkeeper-body">
+          <circle className="shopkeeper-head" cx="392" cy="150" r="20" fill="#4A3728" />
           <rect x="368" y="170" width="48" height="62" rx="10" fill="#E8771A" />
           <path d="M380 178 h24" stroke="#B85A00" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="385" cy="148" r="2.4" fill="#FDFAF4" />
-          <circle cx="399" cy="148" r="2.4" fill="#FDFAF4" />
+          <circle className="shopkeeper-eye" cx="385" cy="148" r="2.4" fill="#FDFAF4" />
+          <circle className="shopkeeper-eye" cx="399" cy="148" r="2.4" fill="#FDFAF4" />
           <path d="M386 158 Q392 162 398 158" stroke="#FDFAF4" strokeWidth="2" fill="none" strokeLinecap="round" />
         </g>
         {/* counter */}
@@ -131,6 +231,10 @@ export default function KiranaShopSVG() {
             <rect x="80" y="252" width="150" height="66" rx="4" fill="#C0392B" />
             <rect x="86" y="256" width="66" height="58" rx="2" fill="#FFF9F0" />
             <rect x="152" y="256" width="66" height="58" rx="2" fill="#FFF9F0" />
+            {/* floating ledger dots - digital aura */}
+            <circle className="ledger-dot" cx="119" cy="285" r="2" fill="#E8771A" opacity="0" />
+            <circle className="ledger-dot" cx="145" cy="295" r="2" fill="#D4A017" opacity="0" />
+            <circle className="ledger-dot" cx="105" cy="305" r="2" fill="#2D6A4F" opacity="0" />
             {[0, 1, 2, 3].map((i) => (
               <line key={i} data-gsap="rule" x1="91" y1={266 + i * 11} x2="147" y2={266 + i * 11} stroke="#C9B99A" strokeWidth="1.4" />
             ))}
@@ -138,8 +242,11 @@ export default function KiranaShopSVG() {
             <text x="158" y="283" fontSize="9" fill="#4A3728" fontFamily="'JetBrains Mono', monospace">1,200</text>
             <text x="158" y="294" fontSize="9" fill="#2D6A4F" fontFamily="'JetBrains Mono', monospace">paid</text>
           </g>
-          {/* phone with WhatsApp */}
+          {/* phone with WhatsApp - radar pulse targets */}
           <g>
+            {/* radar pulse rings behind phone */}
+            <circle className="phone-pulse-ring" cx="293" cy="290" r="60" fill="none" stroke="#25D366" strokeWidth="1.5" opacity="0" />
+            <circle className="phone-pulse-ring" cx="293" cy="290" r="60" fill="none" stroke="#25D366" strokeWidth="1.5" opacity="0" />
             <rect x="258" y="246" width="70" height="88" rx="10" fill="#1A1209" />
             <rect x="262" y="250" width="62" height="80" rx="7" fill="#E5DDD5" />
             <rect x="262" y="250" width="62" height="16" rx="7" fill="#128C7E" />
