@@ -1,18 +1,16 @@
 "use client";
 
 /**
- * Kirana shop counter scene — hand-coded flat vector SVG (500×380).
- * Fully visible in static HTML; GSAP adds: ruled-line draw, chat bubble +
- * typing dots, lightbulb pulse, whole-scene slide-in.
+ * Kirana shop counter scene — rigged, layered, hand-choreographed.
+ * The server-rendered SVG is the COMPLETE static base scene (no hidden
+ * elements in the DOM). Client extras mount after `ready`; the
+ * useKiranaScene hook owns intro/idle/story/interactions.
+ * Default export name + props signature unchanged (Hero.tsx compatible).
  */
 
-import { useRef } from "react";
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { EASE_EXPO, prefersReduced } from "./gsap-setup";
-
-gsap.registerPlugin(ScrollTrigger);
+import { useEffect, useRef, useState } from "react";
+import { useKiranaScene } from "./kirana/useKiranaScene";
+import KiranaExtras from "./kirana/extras";
 
 function WhatsAppGlyph() {
   return (
@@ -31,237 +29,207 @@ function WhatsAppGlyph() {
 
 export { WhatsAppGlyph };
 
+const JAR_COLORS = ["#E8771A", "#D4A017", "#2D6A4F", "#C0392B"];
+const JAR_GLASS = ["#FFF3E0", "#E8DDD0", "#FFF8E1", "#DCF8C6"];
+// Upper fan only (0..180°) so rays never touch the hanging sign; cone fills below.
+const RAY_ANGLES = [0, 45, 90, 135, 180];
+
+function Jar({ row, i }: { row: number; i: number }) {
+  const cx = 88 + i * 36;
+  const color = JAR_COLORS[(row + i) % 4];
+  const glass = JAR_GLASS[(row + i) % 4];
+  const id = `k-jar-${String(row * 4 + i + 1).padStart(2, "0")}`;
+  const isDrainJar = row === 2 && i === 1;
+  if (i % 2 === 0) {
+    const cy = 118 + row * 34;
+    return (
+      <g data-k={id}>
+        <circle cx={cx} cy={cy} r="9" fill={color} opacity="0.85" />
+        <circle data-k="fill" cx={cx} cy={cy + 2} r="5.5" fill={glass} opacity="0.9" />
+        <line x1={cx - 6} y1={cy - 9} x2={cx + 6} y2={cy - 9} stroke="#1A1209" strokeWidth="2" strokeLinecap="round" />
+      </g>
+    );
+  }
+  const x = 80 + i * 36;
+  const y = 106 + row * 34;
+  return (
+    <g data-k={id}>
+      <rect x={x} y={y} width="16" height="22" rx="3" fill={glass} stroke="#8B7355" strokeWidth="1.5" />
+      <rect data-k="fill" x={x + 3} y={y + 8} width="10" height="11" rx="1.5" fill={isDrainJar ? "#E8771A" : color} opacity="0.85" />
+      <rect x={x - 1} y={y - 4} width="18" height="5" rx="2" fill="#1A1209" />
+    </g>
+  );
+}
+
 export default function KiranaShopSVG() {
   const root = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
 
-  useGSAP(
-    () => {
-      if (prefersReduced()) return;
-      const q = gsap.utils.selector(root.current);
-      const cleanups: Array<() => void> = [];
-      
-      // --- Phase 1: Ambient SVG Idle Loops ---
-      
-      // 1. Signboard gentle pendulum sway
-      gsap.to(q('.stall-board'), {
-        rotation: 1.2,
-        duration: 3.2,
-        ease: "sine.inOut",
-        yoyo: true,
-        repeat: -1,
-        transformOrigin: "top center",
-      });
-      
-      // 2. Shopkeeper breathing + eye blink
-      gsap.to(q('.shopkeeper-body'), {
-        y: -2.5,
-        duration: 2.2,
-        ease: "sine.inOut",
-        yoyo: true,
-        repeat: -1,
-      });
-      gsap.to(q('.shopkeeper-head'), {
-        y: -2.5,
-        duration: 2.2,
-        ease: "sine.inOut",
-        yoyo: true,
-        repeat: -1,
-      });
-      // Eye blink - scale Y to near-zero
-      q('.shopkeeper-eye').forEach((eye) => {
-        gsap.to(eye as Element, {
-          scaleY: 0.1,
-          duration: 0.12,
-          repeat: -1,
-          repeatDelay: 3.5,
-          ease: "power2.inOut",
-          transformOrigin: "center",
-        });
-      });
-      
-      // 3. WhatsApp phone radar pulse
-      q('.phone-pulse-ring').forEach((ring, i) => {
-        gsap.fromTo(ring as Element,
-          { scale: 1, opacity: 0.6 },
-          {
-            scale: 1.45,
-            opacity: 0,
-            duration: 2,
-            ease: "power1.out",
-            repeat: -1,
-            delay: i * 0.75,
-            transformOrigin: "center",
-          }
-        );
-      });
-      
-      // 4. Digital aura - floating ledger dots
-      q('.ledger-dot').forEach((dot, i) => {
-        gsap.to(dot as Element, {
-          y: -25,
-          opacity: 0,
-          duration: 1.8,
-          ease: "power1.inOut",
-          repeat: -1,
-          delay: i * 0.8,
-        });
-      });
-      
-      // 5. Jar/shelf ambient shimmer
-      q('.jar-shimmer').forEach((shimmer, i) => {
-        gsap.to(shimmer as Element, {
-          x: 100,
-          duration: 6,
-          ease: "none",
-          repeat: -1,
-          delay: i * 2,
-        });
-      });
-      
-      // --- Existing slide-in animation ---
-      const tl = gsap.timeline({
-        defaults: { ease: EASE_EXPO },
-        scrollTrigger: { trigger: root.current, start: "top 95%", once: true },
-      });
-      tl.from(q('[data-gsap="scene"]'), { x: 60, opacity: 0.1, duration: 1.2 }, 0)
-        .from(q('[data-gsap="rule"]'), { scaleX: 0, transformOrigin: "left center", duration: 0.5, stagger: 0.15 }, 0.4)
-        .from(q('[data-gsap="bubble"]'), { opacity: 0, y: 8, duration: 0.4 }, 1.0);
-      gsap.to(q('[data-gsap="bulb"]'), {
-        opacity: 0.8,
-        scale: 1.02,
-        transformOrigin: "center",
-        duration: 1,
-        yoyo: true,
-        repeat: -1,
-        ease: "sine.inOut",
-      });
-      q('[data-gsap="dot"]').forEach((d, i) => {
-        gsap.to(d as Element, {
-          y: -3,
-          duration: 0.4,
-          yoyo: true,
-          repeat: -1,
-          delay: i * 0.15,
-          ease: "sine.inOut",
-        });
-      });
-      
-      return () => cleanups.forEach((fn) => fn());
-    },
-    { scope: root }
-  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    setReady(true);
+  }, []);
+
+  useKiranaScene(root, ready);
 
   return (
     <div ref={root} className="mx-auto w-full max-w-[500px]">
-      <svg viewBox="0 0 500 380" className="h-auto w-full" role="img" aria-label="Illustration of Sharma Kirana shop counter with an open ledger and a phone showing WhatsApp">
-        {/* ambient */}
-        <ellipse cx="250" cy="352" rx="190" ry="16" fill="#E8DDD0" opacity="0.7" />
-        {/* hanging bulb */}
-        <g data-gsap="bulb">
-          <line x1="250" y1="0" x2="250" y2="34" stroke="#1A1209" strokeWidth="2" />
-          <circle cx="250" cy="48" r="14" fill="#FFF8E1" stroke="#D4A017" strokeWidth="2" />
-          <circle cx="250" cy="48" r="5" fill="#E8771A" />
-          {[0, 45, 90, 135, 180, 225, 270, 315].map((a) => (
+      <svg
+        viewBox="0 0 500 380"
+        className="h-auto w-full"
+        role="img"
+        aria-label="Illustration: a shopkeeper at Sharma Kirana photographs a bill, VyapaarAI records it in the ledger, flags low stock and lifts the business health score from 44 to 88."
+      >
+        <defs>
+          <linearGradient id="kr-cone" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#D4A017" stopOpacity="0.18" />
+            <stop offset="1" stopColor="#D4A017" stopOpacity="0" />
+          </linearGradient>
+          <radialGradient id="kr-glow" cx="0.5" cy="0.5" r="0.5">
+            <stop offset="0" stopColor="#D4A017" stopOpacity="0.35" />
+            <stop offset="1" stopColor="#D4A017" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+
+        {/* ground shadow */}
+        <ellipse data-k="shadow" cx="250" cy="352" rx="190" ry="16" fill="#E8DDD0" opacity="0.7" />
+
+        {/* ceiling beam + hanging ropes */}
+        <g data-k="beam">
+          <rect x="150" y="8" width="200" height="6" rx="3" fill="#1A1209" />
+          <circle cx="182" cy="12" r="2.5" fill="#1A1209" />
+          <circle cx="338" cy="12" r="2.5" fill="#1A1209" />
+        </g>
+        <line data-k="rope-L" x1="182" y1="12" x2="182" y2="58" stroke="#1A1209" strokeWidth="1.5" />
+        <line data-k="rope-R" x1="338" y1="12" x2="338" y2="58" stroke="#1A1209" strokeWidth="1.5" />
+
+        {/* hanging lamp: cord, glow, bulb, rays, cone */}
+        <g data-k="lamp">
+          <circle data-k="glow" cx="250" cy="48" r="26" fill="url(#kr-glow)" />
+          <line data-k="cord" x1="250" y1="0" x2="250" y2="34" stroke="#1A1209" strokeWidth="2" />
+          <circle data-k="bulb" cx="250" cy="48" r="14" fill="#FFF8E1" stroke="#D4A017" strokeWidth="2" />
+          <circle data-k="filament" cx="250" cy="48" r="5" fill="#E8771A" />
+          {RAY_ANGLES.map((a) => (
             <line
               key={a}
-              x1={250 + 22 * Math.cos((a * Math.PI) / 180)}
-              y1={48 + 22 * Math.sin((a * Math.PI) / 180)}
-              x2={250 + 28 * Math.cos((a * Math.PI) / 180)}
-              y2={48 + 28 * Math.sin((a * Math.PI) / 180)}
+              data-k="ray"
+              x1={250 + 20 * Math.cos((a * Math.PI) / 180)}
+              y1={48 - 20 * Math.sin((a * Math.PI) / 180)}
+              x2={250 + 27 * Math.cos((a * Math.PI) / 180)}
+              y2={48 - 27 * Math.sin((a * Math.PI) / 180)}
               stroke="#D4A017"
               strokeWidth="1.5"
               strokeLinecap="round"
             />
           ))}
+          <polygon data-k="cone" points="236,62 264,62 292,232 208,232" fill="url(#kr-cone)" />
         </g>
-        {/* shop sign - pendulum sway target */}
-        <g className="stall-board" transform="rotate(-2 250 92)">
-          <rect x="160" y="74" width="180" height="36" rx="6" fill="#0F2040" />
-          <text x="250" y="98" textAnchor="middle" fontSize="17" fill="#FDFAF4" fontFamily="Georgia, serif" fontWeight="bold">
+
+        {/* hanging shop sign (moved up/right so jars + rays clear it) */}
+        <g data-k="sign" transform="rotate(-3 182 58)">
+          <rect x="170" y="58" width="180" height="36" rx="6" fill="#0F2040" />
+          <rect x="170" y="58" width="180" height="36" rx="6" fill="none" stroke="#D4A017" strokeWidth="1.5" opacity="0.6" />
+          <text x="260" y="82" textAnchor="middle" fontSize="17" fill="#FDFAF4" fontFamily="Georgia, serif" fontWeight="bold">
             Sharma Kirana
           </text>
         </g>
-        {/* shelves with jars - shimmer targets */}
-        {[0, 1, 2].map((row) => (
-          <g key={row}>
-            <rect x="70" y={128 + row * 34} width="150" height="6" rx="3" fill="#8B6914" />
-            {[0, 1, 2, 3].map((i) => (
-              <g key={i}>
-                {i % 2 === 0 ? (
-                  <circle 
-                    className="jar-shimmer"
-                    cx={88 + i * 36} 
-                    cy={118 + row * 34} 
-                    r="9" 
-                    fill={["#E8771A", "#D4A017", "#2D6A4F", "#C0392B"][ (row + i) % 4 ]} 
-                    opacity="0.85" 
-                  />
-                ) : (
-                  <rect 
-                    className="jar-shimmer"
-                    x={80 + i * 36} 
-                    y={106 + row * 34} 
-                    width="16" 
-                    height="22" 
-                    rx="3" 
-                    fill={["#FFF3E0", "#E8DDD0", "#FFF8E1", "#DCF8C6"][ (row + i) % 4 ]} 
-                    stroke="#8B7355" 
-                    strokeWidth="1.5" 
-                  />
-                )}
-              </g>
-            ))}
-          </g>
-        ))}
-        {/* shopkeeper - breathing + blink targets */}
-        <g className="shopkeeper-body">
-          <circle className="shopkeeper-head" cx="392" cy="150" r="20" fill="#4A3728" />
-          <rect x="368" y="170" width="48" height="62" rx="10" fill="#E8771A" />
-          <path d="M380 178 h24" stroke="#B85A00" strokeWidth="2" strokeLinecap="round" />
-          <circle className="shopkeeper-eye" cx="385" cy="148" r="2.4" fill="#FDFAF4" />
-          <circle className="shopkeeper-eye" cx="399" cy="148" r="2.4" fill="#FDFAF4" />
-          <path d="M386 158 Q392 162 398 158" stroke="#FDFAF4" strokeWidth="2" fill="none" strokeLinecap="round" />
+
+        {/* shelves with jars */}
+        <g data-k="shelves">
+          {[0, 1, 2].map((row) => (
+            <g key={row}>
+              <rect data-k={`plank-${row + 1}`} x="70" y={128 + row * 34} width="150" height="6" rx="3" fill="#8B6914" />
+              {[0, 1, 2, 3].map((i) => (
+                <Jar key={i} row={row} i={i} />
+              ))}
+            </g>
+          ))}
         </g>
+
+        {/* shopkeeper (rigged) */}
+        <g data-k="keeper">
+          <g data-k="armL">
+            <rect x="356" y="184" width="16" height="30" rx="8" fill="#E8771A" />
+            <rect x="352" y="206" width="13" height="20" rx="6" fill="#E8771A" />
+            <circle data-k="handL" cx="358" cy="228" r="8" fill="#4A3728" />
+          </g>
+          <g data-k="body">
+            <rect x="368" y="178" width="48" height="54" rx="10" fill="#E8771A" />
+            <path d="M380 186 h24" stroke="#B85A00" strokeWidth="2" strokeLinecap="round" />
+          </g>
+          <rect data-k="neck" x="384" y="166" width="16" height="12" rx="3" fill="#4A3728" />
+          <g data-k="head">
+            <circle cx="392" cy="150" r="20" fill="#4A3728" />
+            <path d="M373 146 Q376 128 392 127 Q408 128 411 146 Q402 136 392 136 Q382 136 373 146 Z" fill="#1A1209" />
+            <circle data-k="ear" cx="372" cy="151" r="3" fill="#4A3728" stroke="#1A1209" strokeWidth="1" />
+            <g data-k="eyeL">
+              <circle cx="385" cy="148" r="3" fill="#FDFAF4" />
+              <circle data-k="pupilL" cx="385" cy="148.5" r="1.4" fill="#1A1209" />
+            </g>
+            <g data-k="eyeR">
+              <circle cx="399" cy="148" r="3" fill="#FDFAF4" />
+              <circle data-k="pupilR" cx="399" cy="148.5" r="1.4" fill="#1A1209" />
+            </g>
+            <line data-k="browL" x1="381" y1="140" x2="389" y2="140" stroke="#1A1209" strokeWidth="1.8" strokeLinecap="round" />
+            <line data-k="browR" x1="395" y1="140" x2="403" y2="140" stroke="#1A1209" strokeWidth="1.8" strokeLinecap="round" />
+            <path data-k="mouth" d="M386 158 Q392 162 398 158" stroke="#FDFAF4" strokeWidth="2" fill="none" strokeLinecap="round" />
+          </g>
+          <g data-k="armR">
+            <rect x="412" y="184" width="16" height="30" rx="8" fill="#E8771A" />
+            <rect x="415" y="206" width="13" height="20" rx="6" fill="#E8771A" />
+            <circle data-k="handR" cx="415" cy="228" r="8" fill="#4A3728" />
+            <rect data-k="thumb" x="419" y="216" width="5" height="9" rx="2" fill="#4A3728" />
+          </g>
+        </g>
+
         {/* counter */}
-        <g data-gsap="scene">
+        <g data-k="counter">
           <rect x="40" y="232" width="420" height="110" rx="10" fill="#8B6914" />
-          <rect x="40" y="232" width="420" height="14" rx="7" fill="#A67C2E" />
-          {/* open bahi-khata */}
-          <g>
-            <rect x="80" y="252" width="150" height="66" rx="4" fill="#C0392B" />
-            <rect x="86" y="256" width="66" height="58" rx="2" fill="#FFF9F0" />
-            <rect x="152" y="256" width="66" height="58" rx="2" fill="#FFF9F0" />
-            {/* floating ledger dots - digital aura */}
-            <circle className="ledger-dot" cx="119" cy="285" r="2" fill="#E8771A" opacity="0" />
-            <circle className="ledger-dot" cx="145" cy="295" r="2" fill="#D4A017" opacity="0" />
-            <circle className="ledger-dot" cx="105" cy="305" r="2" fill="#2D6A4F" opacity="0" />
-            {[0, 1, 2, 3].map((i) => (
-              <line key={i} data-gsap="rule" x1="91" y1={266 + i * 11} x2="147" y2={266 + i * 11} stroke="#C9B99A" strokeWidth="1.4" />
-            ))}
+          <rect x="40" y="232" width="420" height="14" rx="7" fill="#A67C2A" />
+          <line x1="48" y1="262" x2="452" y2="262" stroke="#6E5210" strokeWidth="1.5" opacity="0.25" />
+          <line x1="48" y1="282" x2="452" y2="282" stroke="#6E5210" strokeWidth="1.5" opacity="0.25" />
+          <line x1="48" y1="302" x2="452" y2="302" stroke="#6E5210" strokeWidth="1.5" opacity="0.25" />
+          <line x1="48" y1="240" x2="452" y2="240" stroke="#FDFAF4" strokeWidth="1.5" opacity="0.35" />
+          <ellipse cx="155" cy="322" rx="80" ry="6" fill="#1A1209" opacity="0.22" />
+          <ellipse cx="293" cy="338" rx="42" ry="5" fill="#1A1209" opacity="0.22" />
+          <ellipse cx="60" cy="230" rx="16" ry="3" fill="#1A1209" opacity="0.22" />
+        </g>
+
+        {/* open bahi-khata */}
+        <g data-k="ledger">
+          <rect data-k="cover" x="80" y="252" width="150" height="66" rx="4" fill="#C0392B" />
+          <rect data-k="pageL" x="86" y="256" width="66" height="58" rx="2" fill="#FFF9F0" />
+          <rect data-k="pageR" x="152" y="256" width="66" height="58" rx="2" fill="#FFF9F0" />
+          {[0, 1, 2, 3].map((i) => (
+            <path key={i} data-k="rule" d={`M91 ${266 + i * 11} H147`} stroke="#C9B99A" strokeWidth="1.4" />
+          ))}
+          <g data-k="entries">
             <text x="158" y="272" fontSize="9" fill="#4A3728" fontFamily="'JetBrains Mono', monospace">320</text>
             <text x="158" y="283" fontSize="9" fill="#4A3728" fontFamily="'JetBrains Mono', monospace">1,200</text>
             <text x="158" y="294" fontSize="9" fill="#2D6A4F" fontFamily="'JetBrains Mono', monospace">paid</text>
           </g>
-          {/* phone with WhatsApp - radar pulse targets */}
-          <g>
-            {/* radar pulse rings behind phone */}
-            <circle className="phone-pulse-ring" cx="293" cy="290" r="60" fill="none" stroke="#25D366" strokeWidth="1.5" opacity="0" />
-            <circle className="phone-pulse-ring" cx="293" cy="290" r="60" fill="none" stroke="#25D366" strokeWidth="1.5" opacity="0" />
-            <rect x="258" y="246" width="70" height="88" rx="10" fill="#1A1209" />
-            <rect x="262" y="250" width="62" height="80" rx="7" fill="#E5DDD5" />
-            <rect x="262" y="250" width="62" height="16" rx="7" fill="#128C7E" />
-            <circle cx="270" cy="258" r="4" fill="#25D366" />
-            <text x="278" y="261" fontSize="7" fill="#fff" fontFamily="Inter, sans-serif">VyapaarAI</text>
-            <g data-gsap="bubble">
-              <rect x="266" y="272" width="54" height="26" rx="6" fill="#fff" stroke="#E8DDD0" strokeWidth="1" />
-              <text x="271" y="282" fontSize="7" fill="#1A1209" fontFamily="Inter, sans-serif">Bill read!</text>
-              <text x="271" y="291" fontSize="6.5" fill="#2D6A4F" fontFamily="Inter, sans-serif">+ Rs.2,340</text>
-              <circle data-gsap="dot" cx="270" cy="306" r="2.4" fill="#8B7355" />
-              <circle data-gsap="dot" cx="277" cy="306" r="2.4" fill="#8B7355" />
-              <circle data-gsap="dot" cx="284" cy="306" r="2.4" fill="#8B7355" />
-            </g>
+          <path data-k="corner" d="M212 256 q6 6 2 14 q-6 -2 -8 -8 q-1 -4 6 -6" fill="#FFF8E7" stroke="#C9B99A" strokeWidth="1" />
+        </g>
+
+        {/* phone with WhatsApp */}
+        <g data-k="phone">
+          <rect data-k="phonebody" x="258" y="246" width="70" height="88" rx="10" fill="#1A1209" />
+          <rect data-k="screen" x="262" y="250" width="62" height="80" rx="7" fill="#E5DDD5" />
+          <rect data-k="header" x="262" y="250" width="62" height="16" rx="7" fill="#128C7E" />
+          <circle data-k="dot-status" cx="270" cy="258" r="4" fill="#25D366" />
+          <text x="278" y="261" fontSize="7" fill="#fff" fontFamily="Inter, sans-serif">VyapaarAI</text>
+          <g data-k="bubble">
+            <rect x="266" y="272" width="54" height="26" rx="6" fill="#fff" stroke="#E8DDD0" strokeWidth="1" />
+            <text data-k="bubble-t1" x="271" y="282" fontSize="7" fill="#1A1209" fontFamily="Inter, sans-serif">Bill read!</text>
+            <text data-k="bubble-t2" x="271" y="291" fontSize="6.5" fill="#2D6A4F" fontFamily="Inter, sans-serif">+ Rs.2,340</text>
+            <circle data-k="dot" cx="270" cy="306" r="2.4" fill="#8B7355" />
+            <circle data-k="dot" cx="277" cy="306" r="2.4" fill="#8B7355" />
+            <circle data-k="dot" cx="284" cy="306" r="2.4" fill="#8B7355" />
           </g>
         </g>
+
+        {ready ? <KiranaExtras /> : null}
       </svg>
     </div>
   );
