@@ -543,3 +543,74 @@ Constitutional for every future master pass. Overrides later prompts on safety, 
 Standing orders: every report uses gate table + evidence tails + honest gaps. Never redo committed phases after interruptions; recover state first (R10). This pass changed NO product code (skills-only + this section).
 
 Skills after P0 (16): systematic-debugging, verification-before-completion, test-driven-development, executing-plans, requesting-code-review (obra/superpowers); incremental-implementation, doubt-driven-development, spec-driven-development, context-engineering, code-review-and-quality, debugging-and-error-recovery (addyosmani/agent-skills); kept: animate, api-and-interface-design, design-engineering, frontend-design, landing-page-design. root-cause-tracing is NOT standalone upstream — ships as systematic-debugging/root-cause-tracing.md (present).
+
+## KIRANA SVG ANIMATION — PHASE 0 AUDIT (2026-10-01)
+
+### Baseline checks
+- `npx tsc --noEmit` → **0 errors** (clean)
+- `npm run build` → **green** (13 routes, `/` 23.8 kB)
+- GSAP version: **3.15.0** (@gsap/react 2.1.2) — all plugins free from 3.13+
+- Skills present in `.opencode/skills/`: animate, api-and-interface-design, code-review-and-quality, debugging-and-error-recovery, design-engineering, frontend-design, landing-page-design, systematic-debugging, test-driven-development, verification-before-completion
+- gsap-skills / web-animation-skills: **FALLBACK** (built-in knowledge; clone attempted but network timeout)
+
+### Current KiranaShopSVG.tsx audit
+- **File**: `components/landing/KiranaShopSVG.tsx` (161 lines)
+- **viewBox**: `0 0 500 380`
+- **Wrapper**: `<div className="mx-auto w-full max-w-[500px]">` → SVG scales responsively
+- **Exports**: default `KiranaShopSVG`, named `WhatsAppGlyph` (used by Hero.tsx)
+- **Animation currently**: useGSAP hook with ScrollTrigger once:
+  - Scene slide-in: `x: 60, opacity: 0.1 → 1` (1.2s, expo.out)
+  - Ruled lines draw: `scaleX: 0 → 1` stagger 0.15s (0.4s delay)
+  - Chat bubble: `opacity: 0, y: 8 → 1` (0.4s, 1.0s delay)
+  - Bulb pulse: opacity 0.8, scale 1.02, yoyo repeat -1 (sine.inOut)
+  - Typing dots: y -3, yoyo repeat -1, stagger 0.15s
+
+### Element coordinates (key anchors for rigging)
+| Element | Coordinates | Notes |
+|---|---|---|
+| Ground shadow (ellipse) | cx=250, cy=352, rx=190, ry=16 | |
+| Lamp cord | x1=250, y1=0 → x2=250, y2=34 | stroke #1A1209 |
+| Bulb center | cx=250, cy=48, r=14 (outer), r=5 (filament) | rays at 22→28 radius, 8 directions |
+| Sign "Sharma Kirana" | rect x=160,y=74,w=180,h=36; text x=250,y=98 | rotated -2° around (250,92) — overlaps shelf 1 jars |
+| Shelves (3 rows) | planks y=128,162,196; jars 4 per row | jars at cx=88,124,160,196; alternating circles/rects |
+| Shopkeeper | head cx=392,cy=150,r=20; body rect x=368,y=170,w=48,h=62 | single group, not rigged; eyes/mouth static |
+| Counter | rect x=40,y=232,w=420,h=110; top plank h=14 | wood #8B6914 / #A67C2E |
+| Ledger | cover rect x=80,y=252,w=150,h=66; pages x=86,152 w=66,h=58 | 4 ruled lines y=266,277,288,299; entries: 320, 1,200, paid |
+| Phone | body x=258,y=246,w=70,h=88; screen x=262,y=250,w=62,h=80 | header #128C7E; status dot cx=270,cy=258; bubble at y=272; 3 typing dots y=306 |
+
+### Colours (tokens)
+| Token | Hex | Usage |
+|---|---|---|
+| saffron | #E8771A | bulb filament, shopkeeper kurta, sign bg |
+| gold | #D4A017 | bulb glass, rays, jar fills |
+| navy | #0F2040 | sign background |
+| ink | #1A1209 | cord, phone body, text |
+| wood | #8B6914 | shelves, counter, jar strokes |
+| wood-light | #A67C2E | counter top plank |
+| wood-dark | #6E5210 | (not used yet) |
+| ledger-red | #C0392B | ledger cover |
+| paper | #FFF8E7 / #FFF9F0 | ledger pages |
+| ivory | #FDFAF4 | sign text, eyes, skin highlights |
+| WA-green | #25D366 | WhatsApp glyph, status dot |
+| WA-teal | #128C7E | phone header |
+| ledger-green | #2D6A4F | "paid" text, jar fill |
+
+### Preloader / Watchdog / Ready signal
+- **LandingShell** owns `ready` state; shows `<Preloader onDone={() => setReady(true)} />` until done
+- **Preloader** runs ~1.6-1.8s (bar 1.6s + fade 0.4s delay), then calls `onDone()`; failsafe at 2.5s
+- **LandingShell watchdog** (LAW-WATCHDOG): after 1500ms, force-sets `opacity=1, transform=none` on ALL `[data-gsap]` elements
+- **Hero.tsx** uses `useGSAP` with timeline (no ScrollTrigger for intro); CTAs animate at 1.0s
+- **KiranaShopSVG** ScrollTrigger starts at `top 95%` (once) — this means its intro plays when the SVG enters viewport, which is AFTER Hero's intro (Hero CTAs at 1.0s, SVG lower on page)
+- **No explicit "preloader done" event** exported — must poll for preloader DOM removal or use the `ready` context (LandingShell doesn't expose it)
+
+### Deviations from master spec (§6 artwork fixes needed)
+- a) Sign overlaps shelf 1 rightmost jar + bulb rays touch sign → needs reposition + hanging ropes + ceiling beam
+- b) Shopkeeper not rigged (single group) → needs named parts for animation
+- c) No light cone / glow under bulb → add gradient cone + radial glow
+- d) No wood grain / contact shadows on counter
+- e) Jars have no lids / inner fills for stock-level animation
+- f) Ledger: 4th ruled line exists but no text (reserved), no page corner curl
+- g) Phone: typing dots present but no explicit "idle wave" yet
+
+### PHASE 0 commit
+Ready to commit audit baseline.
