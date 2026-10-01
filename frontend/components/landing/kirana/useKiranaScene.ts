@@ -12,6 +12,7 @@ import { CustomEase } from "gsap/CustomEase";
 import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { RefObject } from "react";
+import { bindInteractions } from "./interactions";
 import { buildIdle, buildIntro, buildStory } from "./timelines";
 
 gsap.registerPlugin(CustomEase, MotionPathPlugin, ScrollTrigger);
@@ -58,6 +59,7 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
       let intro: gsap.core.Timeline | null = null;
       let idle: ReturnType<typeof buildIdle> | null = null;
       let story: gsap.core.Timeline | null = null;
+      let unbind: (() => void) | null = null;
       let started = false;
       let completed = false;
       let cancelled = false;
@@ -95,10 +97,22 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
             if (cancelled) return;
             try {
               const isMobile = window.matchMedia("(max-width: 639px)").matches;
+              const isCoarse = window.matchMedia("(pointer: coarse)").matches;
               intro = buildIntro(q);
               idle = buildIdle(q, { mobile: isMobile });
               story = buildStory(q, { mobile: isMobile });
               story.pause();
+              try {
+                if (scopeRef.current) {
+                  unbind = bindInteractions(scopeRef.current, q, {
+                    story: () => story,
+                    coarse: isCoarse,
+                    mobile: isMobile,
+                  });
+                }
+              } catch {
+                unbind = null;
+              }
               started = true;
               // Idle group A joins mid-intro (owns nothing the intro still touches);
               // group B (sign/keeper loops) joins at intro complete.
@@ -125,6 +139,11 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
           cancelled = true;
           window.clearTimeout(failStart);
           window.clearTimeout(failDone);
+          try {
+            unbind?.();
+          } catch {
+            /* noop */
+          }
           try {
             intro?.kill();
           } catch {
