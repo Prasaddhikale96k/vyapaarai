@@ -14,12 +14,13 @@ const gradeTone: Record<string, "emerald" | "sky" | "amber" | "rose"> = {
   "High-risk": "rose",
 };
 
-export function ScoreRing({ value, grade }: { value: number; grade: string }) {
+export function ScoreRing({ value, grade }: { value: number | null; grade: string | null }) {
   const [display, setDisplay] = useState(0);
   const R = 52;
   const C = 2 * Math.PI * R;
 
   useEffect(() => {
+    if (value === null || value === undefined) return;
     const controls = animate(0, value, {
       duration: 1.2,
       ease: "easeOut",
@@ -28,8 +29,11 @@ export function ScoreRing({ value, grade }: { value: number; grade: string }) {
     return () => controls.stop();
   }, [value]);
 
+  const v = value ?? 0;
   const color =
-    value >= 80 ? "#34d399" : value >= 65 ? "#38bdf8" : value >= 50 ? "#fbbf24" : "#fb7185";
+    value === null || value === undefined
+      ? "#52525b"
+      : value >= 80 ? "#34d399" : value >= 65 ? "#38bdf8" : value >= 50 ? "#fbbf24" : "#fb7185";
 
   return (
     <div className="flex items-center gap-4">
@@ -46,17 +50,21 @@ export function ScoreRing({ value, grade }: { value: number; grade: string }) {
             strokeLinecap="round"
             strokeDasharray={C}
             initial={{ strokeDashoffset: C }}
-            animate={{ strokeDashoffset: C - (C * value) / 100 }}
+            animate={{ strokeDashoffset: C - (C * v) / 100 }}
             transition={{ duration: 1.2, ease: "easeOut" }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-bold tabular-nums text-zinc-100">{display}</span>
+          <span className="text-3xl font-bold tabular-nums text-zinc-100">
+            {value === null || value === undefined ? "—" : display}
+          </span>
           <span className="text-[11px] text-zinc-500">/ 100</span>
         </div>
       </div>
       <div>
-        <Badge tone={gradeTone[grade] ?? "zinc"}>{grade}</Badge>
+        <Badge tone={grade !== null && grade !== undefined ? (gradeTone[grade] ?? "zinc") : "zinc"}>
+          {grade ?? "—"}
+        </Badge>
         <p className="mt-2 text-xs text-zinc-400">Business health score</p>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { animate, AnimatePresence, motion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { BuySellGrid } from "@/components/buy-sell-grid";
@@ -278,6 +279,15 @@ export default function Dashboard() {
   };
 
   const waConnected = wa.data?.connected === true;
+  // P22 honesty: empty account -> no fake scores; checklist instead.
+  const hasData = health.data?.has_data !== false;
+
+  const ONBOARD_STEPS = [
+    { icon: "📸", title: "Bill photo", detail: "Assistant ko WhatsApp par bill bhejo — ya camera se scan karo", href: "/app/data", cta: "Scan karo" },
+    { icon: "🎤", title: "Voice note", detail: "Bikri ya udhaari mic par bolo, likhna nahi padega", href: "/app/chat", cta: "Chat kholo" },
+    { icon: "🧾", title: "Web grid", detail: "Seedha table me sale aur stock likho", href: "/app/data", cta: "Grid kholo" },
+    { icon: "📊", title: "CSV / Excel", detail: "Purani file upload karo, baaki VyapaarAI sambhalega", href: "/app/data", cta: "Upload karo" },
+  ];
 
   const downloadPdf = async () => {
     try {
@@ -395,6 +405,32 @@ export default function Dashboard() {
 
       <InstallCard />
 
+      {health.data && !hasData && (
+        <FadeIn>
+          <Card delay={0.05} hover className="ledger-top">
+            <h3 className="card-title font-display">Shuru karo — pehli entry 🚀</h3>
+            <p className="card-sub mb-3 mt-1">Neeche 4 tareeke — jo aasan lage, wahi chuno. Pehli entry aate hi tumhara score banega.</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {ONBOARD_STEPS.map((s) => (
+                <div key={s.title} className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3">
+                  <span className="text-2xl" aria-hidden="true">{s.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-zinc-100">{s.title}</p>
+                    <p className="truncate text-xs text-zinc-400">{s.detail}</p>
+                  </div>
+                  <Link
+                    href={s.href}
+                    className="shrink-0 rounded-xl border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
+                  >
+                    {s.cta}
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </FadeIn>
+      )}
+
       {/* row 1: score + subscores */}
       <div className="grid gap-3 lg:grid-cols-3">
         <Card delay={0} hover className="ledger-top lg:col-span-1">
@@ -403,13 +439,18 @@ export default function Dashboard() {
             <SkeletonCard lines={2} />
           ) : health.error || !health.data ? (
             <ErrorBanner message={health.error ?? "Health score nahi mila"} onRetry={health.refetch} />
+          ) : !hasData ? (
+            <>
+              <ScoreRing value={null} grade={null} />
+              <p className="mt-3 text-xs leading-relaxed" style={{ color: "var(--ink-soft)" }}>Pehli entry aate hi score banega 📊</p>
+            </>
           ) : (
             <>
               <ScoreRing value={health.data.overall} grade={health.data.grade} />
               <div className="mt-2">
                 <Stamp
-                  text={health.data.grade}
-                  tone={health.data.overall >= 65 ? "emerald" : health.data.overall >= 50 ? "amber" : "rose"}
+                  text={health.data.grade ?? "—"}
+                  tone={(health.data.overall ?? 0) >= 65 ? "emerald" : (health.data.overall ?? 0) >= 50 ? "amber" : "rose"}
                 />
               </div>
               <p className="mt-3 text-xs leading-relaxed" style={{ color: "var(--ink-soft)" }}>{health.data.headline}</p>
@@ -433,17 +474,17 @@ export default function Dashboard() {
               <Card key={s.name} delay={0.05 * (i + 1)} hover>
                 <div className="flex items-baseline justify-between">
                   <h3 className="card-title">{s.name}</h3>
-                  <span className="text-2xl font-bold tabular-nums text-zinc-50">{s.score}</span>
+                  <span className="text-2xl font-bold tabular-nums text-zinc-50">{s.score ?? "—"}</span>
                 </div>
                 <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, Math.max(0, s.score))}%` }}
+                    animate={{ width: `${Math.min(100, Math.max(0, s.score ?? 0))}%` }}
                     transition={{ duration: 0.8, delay: 0.1 + 0.08 * i }}
                     className={`h-full rounded-full ${
-                      s.score >= 65
+                      (s.score ?? 0) >= 65
                         ? "bg-gradient-to-r from-emerald-400 to-teal-500"
-                        : s.score >= 50
+                        : (s.score ?? 0) >= 50
                           ? "bg-amber-500"
                           : "bg-rose-500"
                     }`}
@@ -500,7 +541,11 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3 lg:col-span-2">
           <Card delay={0} hover>
             <p className="card-sub">Health</p>
-            <CountUp value={health.data?.overall ?? 0} suffix="/100" />
+            {!hasData && health.data ? (
+              <span className="tnum text-2xl font-bold" style={{ color: "var(--ink)" }}>—</span>
+            ) : (
+              <CountUp value={health.data?.overall ?? 0} suffix="/100" />
+            )}
           </Card>
           <Card delay={0.05} hover>
             <p className="card-sub">Credit score</p>

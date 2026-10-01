@@ -9,13 +9,14 @@ export const API_URL =
 
 export interface Subscore {
   name: string;
-  score: number;
+  score: number | null;
   weight: number;
   breakdown: string;
 }
 export interface HealthScore {
-  overall: number;
-  grade: string;
+  overall: number | null;
+  grade: string | null;
+  has_data: boolean;
   subscores: Subscore[];
   headline: string;
 }

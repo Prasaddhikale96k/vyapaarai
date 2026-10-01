@@ -72,6 +72,21 @@ def _oid(owner_id) -> int:
         return 1
 
 
+def owner_has_data(db: Session, owner_id: int = 1) -> bool:
+    """P22 honesty: True if the owner has ANY business row. Never raises."""
+    try:
+        oid = _oid(owner_id)
+        for model in (Sale, Product, Receivable, InventoryItem, Expense):
+            try:
+                if db.query(model.id).filter(model.owner_id == oid).first() is not None:
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
+
+
 def revenue_between(db: Session, start: date, end: date, owner_id: int = 1) -> float:
     try:
         oid = _oid(owner_id)
@@ -321,9 +336,24 @@ def health_score(db: Session, today: Optional[date] = None, owner_id: int = 1) -
         f"(score {weakest['score']}/100) — {weakest['breakdown']}."
     )
 
+    # P22 honesty: no rows -> scores are null (breakdown zeros stay).
+    has_data = owner_has_data(db, oid)
+    if not has_data:
+        headline = "No entries yet — your score builds from your first sale, stock, or payment."
+        for s in subscores:
+            s["score"] = None
+        return {
+            "overall": None,
+            "grade": None,
+            "has_data": False,
+            "subscores": subscores,
+            "headline": headline,
+        }
+
     return {
         "overall": overall,
         "grade": grade,
+        "has_data": True,
         "subscores": subscores,
         "headline": headline,
     }

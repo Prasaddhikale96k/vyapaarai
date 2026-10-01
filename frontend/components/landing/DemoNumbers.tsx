@@ -142,6 +142,7 @@ export default function DemoNumbers() {
     low_stock_count: number;
     voice_entries: number;
     health_now: number;
+    business_name: string;
   } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -156,6 +157,7 @@ export default function DemoNumbers() {
             low_stock_count: Number(j?.low_stock_count ?? 0) || 0,
             voice_entries: Number(j?.voice_entries ?? 0) || 0,
             health_now: Number(j?.health_now ?? 0) || 0,
+            business_name: String(j?.business_name ?? "").trim(),
           });
         }
       } catch {
@@ -168,6 +170,7 @@ export default function DemoNumbers() {
   }, []);
   const live = stats !== null &&
     (stats.overdue_total > 0 || stats.low_stock_count > 0 || stats.voice_entries > 0);
+  const biz = stats?.business_name ?? "";
 
   useGSAP(
     () => {
@@ -198,7 +201,11 @@ export default function DemoNumbers() {
           Real Numbers. Real Business.
         </h2>
         <p className="mx-auto mt-3 max-w-2xl text-lg" style={{ color: "rgba(253,250,244,0.75)" }}>
-          Like Sharma Kirana Traders in our demo: 30 days on VyapaarAI. Here&apos;s what happened.
+          {live && stats ? (
+            <>Like Sharma Kirana Traders in our demo: 30 days on VyapaarAI. Here&apos;s what happened.</>
+          ) : (
+            <>{biz ? `${biz} — live numbers, updating as the day happens.` : "Live from a real business — numbers update as the owner's day happens."}</>
+          )}
         </p>
         <div ref={gridRef} className="mt-10 grid grid-cols-2 gap-6 lg:grid-cols-3">
           {live && stats ? (
@@ -220,18 +227,40 @@ export default function DemoNumbers() {
           <Stat icon={<PhoneCheckIcon />} from={0} to={0} format={() => "₹0"} label="App Install Required" color="#4CAF7D" started={started} />
         </div>
         <div className="mt-10 rounded-2xl border p-6" style={{ background: "rgba(255,255,255,0.04)", borderColor: "rgba(255,255,255,0.1)" }}>
-          <p className="mb-4 text-sm font-medium" style={{ color: "rgba(253,250,244,0.7)" }}>
-            Business Health Score — Sharma Kirana Traders (Last 12 Weeks)
-          </p>
-          <Suspense
-            fallback={
-              <p className="py-8 text-center text-sm" style={{ color: "rgba(253,250,244,0.7)" }}>
-                Business health score improved from 44 to 88 over 12 weeks.
+          {live && stats ? (
+            <>
+              <p className="mb-4 text-sm font-medium" style={{ color: "rgba(253,250,244,0.7)" }}>
+                Business Health Score — Sharma Kirana Traders (Last 12 Weeks)
               </p>
-            }
-          >
-            <HealthChart />
-          </Suspense>
+              <Suspense
+                fallback={
+                  <p className="py-8 text-center text-sm" style={{ color: "rgba(253,250,244,0.7)" }}>
+                    Business health score improved from 44 to 88 over 12 weeks.
+                  </p>
+                }
+              >
+                <HealthChart />
+              </Suspense>
+            </>
+          ) : (
+            <>
+              <p className="mb-4 text-sm font-medium" style={{ color: "rgba(253,250,244,0.7)" }}>
+                Business Health Score — builds from your first entries
+              </p>
+              <div className="flex h-24 items-end justify-center gap-2 py-4" aria-hidden="true">
+                {[35, 55, 40, 70, 50, 80, 60, 45, 65, 52, 74, 58].map((h, i) => (
+                  <div
+                    key={i}
+                    className="w-4 animate-pulse rounded-t"
+                    style={{ height: `${h}%`, background: "rgba(232,119,26,0.35)", animationDelay: `${i * 120}ms` }}
+                  />
+                ))}
+              </div>
+              <p className="py-2 text-center text-sm" style={{ color: "rgba(253,250,244,0.7)" }}>
+                No entries yet — your live chart appears here after day one.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </section>

@@ -171,8 +171,8 @@ def _demo_fallback(question: str) -> str:
                 pass
 
         headline = str(hs.get("headline", "") or "").strip() if isinstance(hs, dict) else ""
-        overall = hs.get("overall", "") if isinstance(hs, dict) else ""
-        grade = hs.get("grade", "") if isinstance(hs, dict) else ""
+        overall = hs.get("overall") or "" if isinstance(hs, dict) else ""
+        grade = hs.get("grade") or "" if isinstance(hs, dict) else ""
         top_title = ""
         top_detail = ""
         if isinstance(brief, list) and brief:

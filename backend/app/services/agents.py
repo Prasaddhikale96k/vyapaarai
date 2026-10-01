@@ -220,7 +220,7 @@ def tool_get_metric(name: str, owner_id=None) -> str:
                 return json.dumps(int(dead))
             if key == "health_overall":
                 hs = eng.health_score(db, owner_id=oid)
-                return json.dumps(int(hs.get("overall", 0)))
+                return json.dumps(int(hs.get("overall") or 0))
             return "ERROR: unknown metric"
         finally:
             try:

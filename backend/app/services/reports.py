@@ -56,8 +56,8 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
     # --- block 1: health ---
     try:
         hs = eng.health_score(db, owner_id=oid)
-        overall = int(hs.get("overall", 0))
-        grade = str(hs.get("grade", ""))
+        overall = int(hs.get("overall") or 0)
+        grade = str(hs.get("grade") or "")
         subs = hs.get("subscores", []) or []
     except Exception:
         overall, grade, subs = 0, "", []
@@ -182,7 +182,8 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
         data = [["Area", "Score", "Driver"]]
         for s in subs[:4]:
             try:
-                data.append([str(s.get("name", "")), str(s.get("score", "")),
+                sc = s.get("score", "")
+                data.append([str(s.get("name", "")), ("—" if sc is None else str(sc)),
                              str(s.get("breakdown", ""))[:90]])
             except Exception:
                 continue

@@ -232,6 +232,31 @@ except Exception as e:
 
 OH = {"Authorization": f"Bearer {TOK_OWNER}"} if TOK_OWNER else {}
 
+# ================= P22 HONESTY (empty owner -> nulls; seeded owner -> numbers) =================
+try:
+    OH_NEW = {"Authorization": f"Bearer {TOK_NEW}"} if TOK_NEW else {}
+    re_ = client.get("/health-score", headers=OH_NEW)
+    je = re_.json() if re_.status_code == 200 else {}
+    se = je.get("subscores", []) or []
+    ok_empty = (re_.status_code == 200 and je.get("has_data") is False
+                and je.get("overall") is None and je.get("grade") is None
+                and len(se) == 4 and all(s.get("score") is None for s in se))
+    report("honesty empty owner null scores", "pass" if ok_empty else "fail",
+           f"-> {re_.status_code} has_data={je.get('has_data')} overall={je.get('overall')}")
+except Exception as e:
+    report("honesty empty owner null scores", "fail", f"EXC {e}")
+try:
+    r = client.get("/health-score")
+    j = r.json() if r.status_code == 200 else {}
+    s = j.get("subscores", []) or []
+    ok_full = (r.status_code == 200 and j.get("has_data") is True
+               and isinstance(j.get("overall"), int) and isinstance(j.get("grade"), str)
+               and len(s) == 4 and all(isinstance(x.get("score"), int) for x in s))
+    report("honesty seeded owner numeric scores", "pass" if ok_full else "fail",
+           f"-> has_data={j.get('has_data')} overall={j.get('overall')}")
+except Exception as e:
+    report("honesty seeded owner numeric scores", "fail", f"EXC {e}")
+
 # ================= CHAT =================
 try:
     r = client.post("/chat", json={"message": "aaj ki bikri kitni hui?", "phone": "web"})
