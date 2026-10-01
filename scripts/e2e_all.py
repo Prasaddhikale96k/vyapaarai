@@ -105,6 +105,20 @@ def last_reply(phone):
         db.close()
 
 
+# ================= TRUTH ENGINE (P20: /public/stats on pristine fixture) =================
+try:
+    r = client.get("/public/stats")
+    j = r.json() if r.status_code == 200 else {}
+    ok = (r.status_code == 200 and j.get("overdue_total") == 53400.0
+          and j.get("low_stock_count") == 18 and j.get("voice_entries") == 2847
+          and j.get("business_name") == "Sharma Kirana Traders"
+          and isinstance(j.get("health_now"), int) and j.get("health_now") > 0)
+    report("truth engine real payload (no auth)", "pass" if ok else "fail",
+           f"-> {r.status_code} {j}")
+except Exception as e:
+    report("truth engine real payload (no auth)", "fail", f"EXC {e}")
+
+
 # ================= AUTH =================
 NEWPHONE = "91977" + "123456"[:6]
 try:

@@ -35,16 +35,17 @@ def _truth_owner_id(db) -> int:
         import os
 
         from app import config as _cfg
-        from app.services.phone import normalize_phone as _digits
+        from app.services.phone import phone_candidates as _cands
 
         raw = os.getenv("OWNER_PHONE", "") or str(getattr(_cfg, "OWNER_PHONE", "") or "")
-        want = _digits(raw)
+        want = set(_cands(raw)) if str(raw or "").strip() else set()
         if want:
             from app.models import OwnerProfile
 
             for p in db.query(OwnerProfile).all():
                 try:
-                    if _digits(getattr(p, "phone", "")) == want:
+                    from app.services.phone import normalize_phone as _d
+                    if _d(getattr(p, "phone", "")) in want:
                         return int(getattr(p, "id", 1) or 1)
                 except Exception:
                     continue
@@ -84,7 +85,7 @@ def public_stats():
             try:
                 out["low_stock_count"] = int(db.query(InventoryItem).filter(
                     InventoryItem.owner_id == oid,
-                    InventoryItem.stock_qty <= InventoryItem.reorder_level).count() or 0)
+                    InventoryItem.stock_qty < InventoryItem.reorder_level).count() or 0)
             except Exception:
                 pass
             try:
