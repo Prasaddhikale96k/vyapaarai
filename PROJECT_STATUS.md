@@ -614,3 +614,30 @@ Skills after P0 (16): systematic-debugging, verification-before-completion, test
 
 ### PHASE 0 commit
 Ready to commit audit baseline.
+
+### Before/after (Phase 1 static)
+BEFORE: flat static SVG (500×380) — sign grazing shelf-1 jars + bulb rays touching sign; keeper one rigid group; no light cone/glow; no wood grain/contact shadows; jars lidless/fill-less; ledger 3 entries, no corner curl; phone single group.
+AFTER: identical composition, cleaner — sign re-hung at y=58 on ropes+beam (clears jars); 5-ray upper fan + cone + glow (no sign touch); rigged keeper (body/neck/head/hair/eyes+pupils/brows/mouth/ear/2 arms+hands+thumb); grain + shadows; 12 jars lidded with fills (row-3 jar saffron fill = scan target); ledger split (cover/pages/rules/entries/corner, row-4 reserved); phone grouped (body/screen/header/dot/dots/bubble). Extras layer mounted-only (paper/flash/ripples/coins/newrow/pen/plusLabel/scan/lowtag/badge/healthchip/sparkles/chai/dust/cat).
+
+## KIRANA SVG ANIMATION — PHASE 7 VERIFICATION (2026-10-01)
+Commits: [kirana-0] audit 1e32f43 · [kirana-1] rigged static b003499 · [kirana-2] intro 4eeb417 · [kirana-3] idle 68a5597 · [kirana-4] story e07174e · [kirana-5] interactions 4eff14b · [kirana-6] hardening 3e5e6e0 · [kirana-7] verified (this).
+GSAP 3.15.0 + @gsap/react; plugins: CustomEase (kOut/kSettle/kSnap registry), MotionPathPlugin (paper/coin arcs), ScrollTrigger (pause + scroll drift). Manual dashoffset draws (DrawSVG skipped by design). Skills: gsap-skills FALLBACK, web-animation-skills FALLBACK (network timeout; built-in knowledge applied).
+Downgrades: reply bubble check-draw → skipped (pop+shake+nod+smile carry it); scan saffron wash → skipped; ledger corner flutter in coins beat → skipped (idle owns corner); per-entry clip reveal → opacity+y slide; screen-glow breathe → dropped (no overlay node); thumb scaleY 0→1 → 1→1.6 visible nub (anti-blank law wins).
+
+Checks (§16):
+1. tsc --noEmit → **PASS** (0 errors; 1 type fix used in kirana-3: buildIdle return annotation).
+2. npm run build → **PASS** (green, 13/13 static).
+3. Routes (fresh dev server) → **PASS** (`/` `/login` `/register` `/app` `/app/chat` `/app/data` `/app/actions` `/admin` 200, unknown → 404). NOTE: a stale `next start` was squatting :3000 with 404/500s — killed, dev server started, all green.
+4. verify_p3 → **PASS** (9/9 on scratch fixture; backend untouched).
+5. Devanagari grep → **PASS** (kirana/: only BUBBLE_HI Hindi mock + ₹/→ in mocks; zero marketing Devanagari. Full-landing output: brand व्यापार + product mocks + ₹/×/· numerals only).
+6. Console → **PARTIAL** (dev-server log: zero errors/warnings/hydration lines; browser console unverifiable here).
+7. Reduced motion → **UNVERIFIED** (no browser; by construction: mm gate, no extras, no tweens).
+8. JS-disabled/pre-hydration → **PASS by construction** (full base scene in SSR HTML, extras client-only; verified via served `/` 200 + static build).
+9. Offscreen/hidden-tab pause → **UNVERIFIED** (no browser; wired: ScrollTrigger onToggle + visibilitychange, kills on cleanup).
+10. StrictMode/HMR → **UNVERIFIED** (no browser; by construction: all in gsap.context/useGSAP revertOnUpdate, listeners Triggers killed, delayedCalls tracked).
+11. 390px/1920px + fps → **UNVERIFIED** (no browser; vectors-only, ≤70 nodes, transform/opacity/dashoffset only).
+12. Lenis → **UNVERIFIED** (no browser; no Lenis re-init, no global refresh; scroll drift isolated in binder, droppable per ladder).
+13. Changed-files audit → **PASS** (`1e32f43..HEAD`: KiranaShopSVG.tsx + kirana/{constants,extras,interactions,timelines,useKiranaScene}.ts + .bak only; backend/app/admin/login/register/auth/lib untouched).
+14. Skill rules (≥6) → applied: (1) ScrollTrigger+all motion inside gsap.context/useGSAP with revert (systematic-debugging/verification); (2) transform/opacity/dashoffset only (60fps-animation); (3) matchMedia reduced-motion gate, live-reactive (accessible-animation); (4) manual stroke draw client-side behind window guards, static kr- ids (svg-animation); (5) offscreen/tab pause, no leaked tweens (executing-plans/verification-before-completion); (6) prop-conflict audit so story/idle never fight the same prop (doubt-driven-development R6); (7) thin slices + per-phase green gates (incremental-implementation/test-driven-development).
+
+Known limitations: no human has SEEN the motion (all browser checks unverified — needs a 5-min human pass: play, scroll, tug lamp, tap phone, 390px, reduced-motion); reply-check deviation; another session's uncommitted Hero/FeaturesBento edits left untouched in tree.
