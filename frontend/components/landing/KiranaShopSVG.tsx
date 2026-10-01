@@ -93,6 +93,7 @@ export default function KiranaShopSVG() {
         </defs>
 
         {/* ground shadow */}
+        <g aria-hidden="true">
         <ellipse data-k="shadow" cx="250" cy="352" rx="190" ry="16" fill="#E8DDD0" opacity="0.7" />
 
         {/* ceiling beam + hanging ropes */}
@@ -230,6 +231,7 @@ export default function KiranaShopSVG() {
         </g>
 
         {ready ? <KiranaExtras /> : null}
+        </g>
       </svg>
     </div>
   );

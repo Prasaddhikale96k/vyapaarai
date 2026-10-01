@@ -3,7 +3,7 @@
 /**
  * useKiranaScene(scopeRef, enabled) — owns all kirana SVG motion.
  * gsap.matchMedia gates everything on no-preference reduced motion.
- * Intro is time-based (preloader poll); story/idle pause offscreen (later phases).
+ * Intro is time-based (preloader poll); story/idle pause offscreen + on tab hide.
  */
 
 import { useGSAP } from "@gsap/react";
@@ -60,6 +60,8 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
       let idle: ReturnType<typeof buildIdle> | null = null;
       let story: gsap.core.Timeline | null = null;
       let unbind: (() => void) | null = null;
+      let pauseTrigger: ScrollTrigger | null = null;
+      const cleanups: Array<() => void> = [];
       let started = false;
       let completed = false;
       let cancelled = false;
@@ -126,6 +128,48 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
                 if (!cancelled) idle?.B.start();
                 if (!cancelled) story?.play();
               });
+              // Offscreen pause: story + idle freeze when the hero leaves,
+              // resume without a jump when it returns.
+              try {
+                const svgEl = scopeRef.current?.querySelector("svg") ?? null;
+                if (svgEl) {
+                  pauseTrigger = ScrollTrigger.create({
+                    trigger: svgEl,
+                    start: "top 95%",
+                    end: "bottom 5%",
+                    onToggle: (self) => {
+                      try {
+                        if (self.isActive) {
+                          story?.play();
+                          idle?.resumeAll();
+                        } else {
+                          story?.pause();
+                          idle?.pauseAll();
+                        }
+                      } catch {
+                        /* ignore */
+                      }
+                    },
+                  });
+                }
+              } catch {
+                pauseTrigger = null;
+              }
+              const onVis = () => {
+                try {
+                  if (document.hidden) {
+                    story?.pause();
+                    idle?.pauseAll();
+                  } else if (pauseTrigger?.isActive !== false) {
+                    story?.play();
+                    idle?.resumeAll();
+                  }
+                } catch {
+                  /* ignore */
+                }
+              };
+              document.addEventListener("visibilitychange", onVis);
+              cleanups.push(() => document.removeEventListener("visibilitychange", onVis));
               if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
                 (window as unknown as { __kirana?: object }).__kirana = { intro, idle, story };
               }
@@ -159,6 +203,18 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
           } catch {
             /* noop */
           }
+          try {
+            pauseTrigger?.kill();
+          } catch {
+            /* noop */
+          }
+          cleanups.forEach((fn) => {
+            try {
+              fn();
+            } catch {
+              /* noop */
+            }
+          });
           if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
             try {
               delete (window as unknown as { __kirana?: object }).__kirana;
