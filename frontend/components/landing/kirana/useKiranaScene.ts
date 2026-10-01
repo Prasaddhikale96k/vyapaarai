@@ -12,7 +12,7 @@ import { CustomEase } from "gsap/CustomEase";
 import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { RefObject } from "react";
-import { buildIntro } from "./timelines";
+import { buildIdle, buildIntro } from "./timelines";
 
 gsap.registerPlugin(CustomEase, MotionPathPlugin, ScrollTrigger);
 
@@ -56,6 +56,7 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
 
       const mm = gsap.matchMedia();
       let intro: gsap.core.Timeline | null = null;
+      let idle: ReturnType<typeof buildIdle> | null = null;
       let started = false;
       let completed = false;
       let cancelled = false;
@@ -93,14 +94,23 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
             if (cancelled) return;
             try {
               intro = buildIntro(q);
+              idle = buildIdle(q, {
+                mobile: window.matchMedia("(max-width: 639px)").matches,
+              });
               started = true;
+              // Idle group A joins mid-intro (owns nothing the intro still touches);
+              // group B (sign/keeper loops) joins at intro complete.
+              intro.add(() => {
+                if (!cancelled) idle?.A.start();
+              }, 1.6);
               intro.eventCallback("onComplete", () => {
                 completed = true;
                 window.clearTimeout(failStart);
                 window.clearTimeout(failDone);
+                if (!cancelled) idle?.B.start();
               });
               if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
-                (window as unknown as { __kirana?: object }).__kirana = { intro };
+                (window as unknown as { __kirana?: object }).__kirana = { intro, idle };
               }
             } catch {
               failsafe();
@@ -114,6 +124,11 @@ export function useKiranaScene(scopeRef: RefObject<HTMLElement | null>, enabled:
           window.clearTimeout(failDone);
           try {
             intro?.kill();
+          } catch {
+            /* noop */
+          }
+          try {
+            idle?.A.stop();
           } catch {
             /* noop */
           }
