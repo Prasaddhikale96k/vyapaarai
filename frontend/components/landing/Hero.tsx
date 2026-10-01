@@ -36,6 +36,17 @@ export default function Hero() {
         .fromTo(q('[data-gsap="sub"]'), { opacity: 0.3 }, { opacity: 1, duration: 0.8 }, 0.7)
         .from(q('[data-gsap="cta"]'), { y: 20, opacity: 0.2, duration: 0.6, stagger: 0.1 }, 1.0)
         .from(q('[data-gsap="trust"]'), { opacity: 0.2, duration: 0.6 }, 1.2);
+      // Devanagari watermark parallax (transform-only, no layout shift)
+      gsap.to(q('[data-gsap="watermark"]'), {
+        yPercent: -25,
+        ease: "none",
+        scrollTrigger: {
+          trigger: root.current,
+          start: "top top",
+          end: "bottom top",
+          scrub: 1.2,
+        },
+      });
     },
     { scope: root }
   );
@@ -55,6 +66,7 @@ export default function Hero() {
       style={{ background: "#FDFAF4", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}
     >
       <div
+        data-gsap="watermark"
         className="font-devanagari pointer-events-none absolute inset-0 flex items-center justify-center select-none"
         style={{ fontSize: "40vw", opacity: 0.04, color: "#D4A017" }}
         aria-hidden="true"
@@ -100,11 +112,11 @@ export default function Hero() {
           your language, on WhatsApp.
         </p>
 
-        <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link
             data-gsap="cta"
             href="/register"
-            className="inline-flex min-h-[56px] items-center rounded-full px-8 py-4 text-lg font-semibold text-white transition-transform focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="inline-flex min-h-[56px] shrink-0 items-center whitespace-nowrap rounded-full px-8 py-4 text-lg font-semibold text-white transition-transform focus-visible:outline-2 focus-visible:outline-offset-4"
             style={{ background: "#E8771A", outlineColor: "#E8771A", textDecoration: "none", boxShadow: "0 0 40px rgba(232,119,26,0.25)" }}
           >
             See It Work →
@@ -112,7 +124,7 @@ export default function Hero() {
           <button
             data-gsap="cta"
             onClick={() => scrollToId("how-it-works")}
-            className="inline-flex min-h-[56px] items-center gap-2 rounded-full border px-8 py-4 text-lg font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="inline-flex min-h-[56px] shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-8 py-4 text-lg font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
             style={{ borderColor: "#E8DDD0", color: "#1A1209", background: "transparent", outlineColor: "#E8771A" }}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
