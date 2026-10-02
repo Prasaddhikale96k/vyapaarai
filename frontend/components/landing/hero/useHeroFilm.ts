@@ -7,6 +7,7 @@ import type { RefObject } from "react";
 import { registry } from "../motion/registry";
 import { buildIntro, textSafe } from "./filmTimeline";
 import type { IntroBuild } from "./filmTimeline";
+import { buildAmbient } from "./ambient";
 
 function preloaderGone(): boolean {
   try {
@@ -46,6 +47,7 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
       mm.add("(prefers-reduced-motion: no-preference)", () => {
         let build: IntroBuild | null = null;
         let played = false;
+        let ambientOff: (() => void) | null = null;
         const timers: Array<ReturnType<typeof setTimeout>> = [];
         const pollId: Array<ReturnType<typeof setInterval>> = [];
 
@@ -140,6 +142,18 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
           }
         }, 100);
         pollId.push(poll);
+        // Ambient starts only after the intro settles (same props, no fight).
+        const ambPoll = setInterval(() => {
+          try {
+            if (build && build.isDone() && !ambientOff) {
+              clearInterval(ambPoll);
+              ambientOff = buildAmbient(root);
+            }
+          } catch {
+            clearInterval(ambPoll);
+          }
+        }, 500);
+        pollId.push(ambPoll);
 
         return () => {
           pollId.forEach((p) => {
@@ -170,6 +184,14 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
             /* noop */
           }
           undemote(root);
+          if (ambientOff) {
+            try {
+              ambientOff();
+            } catch {
+              /* noop */
+            }
+            ambientOff = null;
+          }
           try {
             intro.cleanup();
           } catch {
