@@ -12,6 +12,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import KiranaShopSVG, { WhatsAppGlyph } from "./KiranaShopSVG";
+import HeroStage from "./hero/HeroStage";
 import { EASE_EXPO, prefersReduced, scrollToId } from "./gsap-setup";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -54,6 +55,7 @@ export default function Hero() {
       className="relative overflow-hidden px-4 pb-16 pt-24 sm:pt-28"
       style={{ background: "#FDFAF4", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}
     >
+      <HeroStage />
       <div
         className="font-devanagari pointer-events-none absolute inset-0 flex items-center justify-center select-none"
         style={{ fontSize: "40vw", opacity: 0.04, color: "#D4A017" }}
@@ -62,7 +64,7 @@ export default function Hero() {
         व्यापार
       </div>
 
-      <div className="relative mx-auto w-full max-w-5xl">
+      <div className="relative z-10 mx-auto w-full max-w-5xl">
         <span
           data-gsap="badge"
           className="mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium"
@@ -75,7 +77,7 @@ export default function Hero() {
         <h1
           id="hero-heading"
           className="font-display mx-auto font-black leading-[0.95] tracking-tight"
-          style={{ fontSize: "clamp(3rem, 9vw, 6rem)", maxWidth: "15ch" }}
+          style={{ fontSize: "clamp(2.75rem, 6.6vw, 7.75rem)", maxWidth: "15ch" }}
         >
           {LINES.map((l) => (
             <span key={l.text} className="block overflow-hidden pb-[0.08em]">
