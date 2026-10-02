@@ -166,3 +166,58 @@
     opacity: 1;
   }
 }
+
+/* ---------- Motion layer (.m-*, additive only; gated to no-preference) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Offscreen CSS-loop pause (governor toggles .m-paused via IntersectionObserver). */
+  .m-paused,
+  .m-paused .landing-marquee-track,
+  .m-paused .landing-ping-ring,
+  .m-paused .landing-bob {
+    animation-play-state: paused;
+  }
+  /* Word-mask units for split headings (transform only). */
+  .m-wmask {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: bottom;
+    padding-bottom: 0.08em;
+    margin-bottom: -0.08em;
+  }
+  .m-wword {
+    display: inline-block;
+    will-change: transform;
+  }
+  /* Curtain overlay (injected, removed on cleanup). */
+  .m-curtain {
+    z-index: 1;
+  }
+  /* Bookmark progress ribbon (G1, desktop only; mounted by Overlays). */
+  .m-ribbon {
+    position: fixed;
+    right: 10px;
+    top: 0;
+    width: 6px;
+    height: 100vh;
+    z-index: 40;
+    pointer-events: none;
+    transform-origin: top center;
+  }
+  /* Primary CTA shine sweep (overlay translating X, transform only). */
+  .m-shine {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  .m-shine::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+    transform: translateX(-120%);
+  }
+}
