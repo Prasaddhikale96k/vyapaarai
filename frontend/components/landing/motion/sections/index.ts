@@ -15,18 +15,25 @@ import { h, type Ctx } from "../helpers";
 import { headingSystem, buttonLife, cleanupAll } from "../systems";
 import { easeOr, isMobile } from "../registry";
 
-/** G3 + pass-through wrapper so every section gets the heading reveal. */
+/** G3 + pass-through wrapper so every section gets the heading reveal.
+ *  Aggregates the heading-system cleanup (split reverts, swash removal)
+ *  with whatever the section builder returns. */
 function withHeadings(fn: BuildFn): BuildFn {
   return (ctx, hh) => {
-    headingSystem(ctx);
-    return fn(ctx, hh);
+    const cleanups: Array<() => void> = [];
+    const hs = headingSystem(ctx);
+    if (hs) cleanups.push(hs);
+    const own = fn(ctx, hh);
+    if (own) cleanups.push(own);
+    return cleanups.length ? cleanupAll(cleanups) : undefined;
   };
 }
 
 // ---- O1: hero intro residue (clearProps after the existing intro settles) ----
 function heroClearResidue(ctx: Ctx): void {
   try {
-    gsap.delayedCall(1.7, () => {
+    // Hero is above the fold; its intro completes ~1.8s after mount.
+    gsap.delayedCall(2.0, () => {
       try {
         gsap.set(
           ctx.root.querySelectorAll(
@@ -136,26 +143,10 @@ export const buildProblem: BuildFn = withHeadings((ctx, hh) => {
 });
 
 export const buildWhatsapp: BuildFn = withHeadings((ctx, hh) => {
-  // O3: the chat film plays on first arrival, then everything stays visible.
-  // Anti-blank: from-state applied only when the trigger fires.
-  const bubbles = ctx.root.querySelectorAll('[data-gsap="bubble"]');
-  if (bubbles.length) {
-    try {
-      gsap.from(bubbles, {
-        y: 14,
-        x: (i) => (i % 2 === 0 ? 20 : -20),
-        scale: 0.94,
-        opacity: 0,
-        duration: 0.4,
-        ease: "power2.out",
-        stagger: 0.8,
-        immediateRender: false,
-        scrollTrigger: { trigger: ctx.root, start: "top 70%", once: true },
-      });
-    } catch {
-      /* bubbles stay visible */
-    }
-  }
+  // O3: the EXISTING section hook already plays the chat film on first arrival
+  // (once:true onEnter) and leaves every bubble visible after completion.
+  // We do NOT re-animate the bubbles (would double-drive the existing hook).
+  // Additively: phone float + header status pulse (both new, no conflict).
   // Phone float (governed).
   const phone = ctx.root.querySelector('[role="img"]') as HTMLElement | null;
   if (phone) {
@@ -169,14 +160,16 @@ export const buildWhatsapp: BuildFn = withHeadings((ctx, hh) => {
 });
 
 export const buildHowItWorks: BuildFn = withHeadings((ctx, hh) => {
-  // O2 residue: clear inline transform/opacity left on the step cards.
-  gsap.delayedCall(1.7, () => {
-    try {
-      gsap.set(ctx.root.querySelectorAll('[data-gsap="step"]'), { clearProps: "transform,opacity" });
-    } catch {
-      /* noop */
-    }
-  });
+  // O2 residue: clear inline transform/opacity left on the step cards, ~1.2s
+  // AFTER they reveal (so the existing from-tween has settled first).
+  try {
+    const tl = gsap.timeline({
+      scrollTrigger: { trigger: ctx.root, start: "top 85%", once: true },
+    });
+    tl.set(ctx.root.querySelectorAll('[data-gsap="step"]'), { clearProps: "transform,opacity" }, 1.2);
+  } catch {
+    /* noop */
+  }
   // O2 connectors: add a traveling "data packet" dot along the arrow path.
   if (isMobile()) return undefined;
   const svg = ctx.root.querySelector('svg[aria-hidden="true"]') as SVGSVGElement | null;
@@ -227,21 +220,20 @@ export const buildVoice: BuildFn = withHeadings(() => {
   return undefined;
 });
 
-export const buildFestival: BuildFn = withHeadings((ctx, hh) => {
-  const flame = ctx.root.querySelector('[data-gsap="flame"]') as Element | null;
-  if (flame) {
-    hh.loop("festival.flame", () => {
-      const tl = gsap.timeline({ repeat: -1, yoyo: true });
-      tl.to(flame, { scaleX: 1.12, scaleY: 0.94, transformOrigin: "center bottom", duration: 0.45, ease: "sine.inOut" });
-      return tl;
-    }, { trigger: ctx.root, nodes: 1, tier: "A" });
-  }
+export const buildFestival: BuildFn = withHeadings(() => {
+  // CONFLICT: the existing FestivalSection hook ALREADY owns the flame
+  // (line ~27: scaleX 1.1 yoyo repeat -1), the sparks, the card pop and the
+  // badge pulses. Animating them again here would double-drive the same
+  // elements. Logged as a deliberate no-op downgrade.
   return undefined;
 });
 
 export const buildSoul: BuildFn = withHeadings((ctx, hh) => {
-  // THE money shot: curtain wipe over the Devanagari mark + breathing scale.
-  // Static DOM keeps the mark fully visible; the hook only adds a wipe overlay.
+  // CONFLICT-AWARE: the existing SoulSection hook owns the mark's scale/
+  // opacity reveal (gsap.set(mark,{opacity:0.05,scale:0.85}) + grow-in).
+  // We therefore NEVER touch scale/opacity here. Additive only: a gentle
+  // governed y-drift "breath" (transform-only, resting opacity untouched) and
+  // a curtain wipe that self-skips when the section is position:static.
   const mark = ctx.root.querySelector('[data-gsap="soul-mark"]') as HTMLElement | null;
   if (!mark) return undefined;
   const cs = window.getComputedStyle(ctx.root as HTMLElement);
@@ -250,7 +242,7 @@ export const buildSoul: BuildFn = withHeadings((ctx, hh) => {
   }
   hh.loop("soul.breath", () => {
     const tl = gsap.timeline({ repeat: -1, yoyo: true });
-    tl.to(mark, { scale: 1.012, transformOrigin: "center center", duration: 2.95, ease: "sine.inOut" });
+    tl.to(mark, { y: -3, duration: 2.95, ease: "sine.inOut" });
     return tl;
   }, { trigger: ctx.root, nodes: 1, tier: "A" });
   return undefined;

@@ -8,36 +8,133 @@
  */
 
 import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { h, type Ctx } from "./helpers";
 import { easeOr, isFineDesktop } from "./registry";
 
-/** G3 — split every h2 (and the CTA h2 when marked) into masked words. */
-export function headingSystem(ctx: Ctx): void {
+/** G3 — split every h2 (and the CTA h2 when marked) into masked words,
+ *  then reveal the subhead directly under it (no existing hook animates
+ *  these paragraphs). Returns one cleanup (splits revert + swashes removed). */
+export function headingSystem(ctx: Ctx): (() => void) | undefined {
+  const cleanups: Array<() => void> = [];
   try {
     const h2s = ctx.root.querySelectorAll("h2, [data-m~='heading']");
     h2s.forEach((el) => {
-      h.splitHeading(el, { type: "lines" });
+      const revert = h.splitHeading(el, { type: "words" });
+      if (revert) cleanups.push(revert);
+      // G3b subhead: h2 + p → fade/slide in after the heading lands.
+      try {
+        const p = el.nextElementSibling as HTMLElement | null;
+        if (p && p.tagName === "P" && !p.hasAttribute("data-gsap")) {
+          p.setAttribute("data-m-hide", "");
+          h.reveal(p, {
+            trigger: p,
+            start: "top 93%",
+            y: 14,
+            duration: 0.7,
+            delay: 0.25,
+            ease: easeOr("kOut", "power2.out"),
+          });
+        }
+      } catch {
+        /* subhead stays as authored */
+      }
     });
   } catch {
     /* headings stay visible */
   }
+  const swashes = headingSwash(ctx);
+  if (swashes) cleanups.push(swashes);
+  return cleanups.length ? cleanupAll(cleanups) : undefined;
 }
 
-/** G3 swash — a hand-drawn underline draws after its heading lands.
- *  Target: an inline SVG path carrying data-m="swash" inside the heading's
- *  accent <span>. Pure overlay, aria-hidden, does not move text. */
-export function headingSwash(ctx: Ctx): void {
+/** G3 swash — hand-drawn wavy underline under each heading's ACCENT span.
+ *  Measured at trigger-fire time, injected as a body-level overlay (page
+ *  coords, aria-hidden, pointer-events:none), drawn once with kPen.
+ *  Skips: hosts/spans owned by section hooks, non-inline spans, spans whose
+ *  computed color equals the heading color (not an accent). */
+export function headingSwash(ctx: Ctx): (() => void) | undefined {
+  const created: SVGSVGElement[] = [];
   try {
-    const swashes = ctx.root.querySelectorAll('[data-m~="swash"] path, [data-m~="swash"]');
-    swashes.forEach((el) => {
-      const path = (el as SVGPathElement).getTotalLength
-        ? (el as SVGPathElement)
-        : (el.querySelector("path") as SVGPathElement | null);
-      if (path) h.drawOnce(path, { trigger: ctx.root, duration: 0.6, ease: easeOr("kPen", "power1.inOut") });
+    const hosts = ctx.root.querySelectorAll<HTMLElement>("h2, [data-m~='heading']");
+    hosts.forEach((host) => {
+      if (host.hasAttribute("data-gsap") || host.querySelector("[data-gsap]")) return;
+      const spans = host.querySelectorAll<HTMLElement>("span[style]");
+      spans.forEach((span) => {
+        try {
+          if (span.hasAttribute("data-gsap") || span.querySelector("[data-gsap]")) return;
+          const disp = window.getComputedStyle(span).display;
+          if (disp !== "inline" && disp !== "inline-block") return;
+          const color = window.getComputedStyle(span).color;
+          if (!color || color === window.getComputedStyle(host).color) return;
+          const draw = () => {
+            try {
+              gsap.delayedCall(1.1, () => {
+                try {
+                  const r = span.getBoundingClientRect();
+                  if (r.width < 6) return;
+                  const w = r.width;
+                  const hgt = 10;
+                  const pageX = r.left + window.scrollX;
+                  const pageY = r.bottom + window.scrollY - Math.max(4, r.height * 0.18);
+                  const ns = "http://www.w3.org/2000/svg";
+                  const svg = document.createElementNS(ns, "svg");
+                  svg.setAttribute("viewBox", `0 0 ${w} ${hgt}`);
+                  svg.setAttribute("width", String(w));
+                  svg.setAttribute("height", String(hgt));
+                  svg.setAttribute("aria-hidden", "true");
+                  svg.setAttribute("focusable", "false");
+                  svg.style.cssText = `position:absolute;left:${pageX}px;top:${pageY}px;pointer-events:none;overflow:visible;`;
+                  const path = document.createElementNS(ns, "path");
+                  const seg = w / 4;
+                  const y0 = hgt * 0.55;
+                  path.setAttribute("d", `M0 ${y0} q ${seg / 2} -4.5 ${seg} 0 t ${seg} 0 t ${seg} 0 t ${seg} 0`);
+                  path.setAttribute("fill", "none");
+                  path.setAttribute("stroke", color);
+                  path.setAttribute("stroke-width", "2.5");
+                  path.setAttribute("stroke-linecap", "round");
+                  svg.appendChild(path);
+                  document.body.appendChild(svg);
+                  created.push(svg);
+                  const len = path.getTotalLength();
+                  gsap.set(path, { strokeDasharray: len, strokeDashoffset: len });
+                  gsap.to(path, {
+                    strokeDashoffset: 0,
+                    duration: 0.6,
+                    ease: easeOr("kPen", "power1.inOut"),
+                  });
+                } catch {
+                  /* swash skipped */
+                }
+              });
+            } catch {
+              /* noop */
+            }
+          };
+          ScrollTrigger.create({
+            trigger: host,
+            start: "top 90%",
+            once: true,
+            onEnter: draw,
+          });
+        } catch {
+          /* this swash skipped */
+        }
+      });
     });
   } catch {
-    /* swash skipped */
+    /* no swashes */
   }
+  if (!created.length) return undefined;
+  return () => {
+    created.forEach((s) => {
+      try {
+        s.remove();
+      } catch {
+        /* noop */
+      }
+    });
+  };
 }
 
 /** G5 — button life: magnetic + periodic shine sweep + press squash. */

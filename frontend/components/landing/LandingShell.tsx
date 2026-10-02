@@ -23,7 +23,84 @@ export default function LandingShell({ children }: { children: React.ReactNode }
   // elements (data-m only, never data-gsap): glows, cones, ghosts, shadows.
   useEffect(() => {
     let idleT: ReturnType<typeof setTimeout> | null = null;
+    // STUCK sweep — the transform-side companion to the opacity sweep above.
+    // (a) word masks that FINISHED (data-m-done) but left a residual translate;
+    // (b) curtain overlays still covering content with no active wipe → removed;
+    // (c) anti-blank: hidden units in view with no active tween → force shown.
+    // Never touches resting-opacity<1 nodes (they are data-m only by convention).
+    const sweepStuck = (scope: ParentNode) => {
+      try {
+        const matrix = (el: HTMLElement): DOMMatrix | null => {
+          try {
+            const t = window.getComputedStyle(el).transform;
+            if (!t || t === "none") return null;
+            return new DOMMatrix(t);
+          } catch {
+            return null;
+          }
+        };
+        const tweening = (el: HTMLElement): boolean => {
+          try {
+            return gsap.isTweening(el);
+          } catch {
+            return false;
+          }
+        };
+        // (a) completed masks with residual transform.
+        scope.querySelectorAll("[data-m-hide][data-m-done]").forEach((node) => {
+          const el = node as HTMLElement;
+          const probe = (el.querySelector(".m-wword") as HTMLElement | null) ?? el;
+          const m = matrix(probe);
+          if (!m) return;
+          if (Math.abs(m.m41) <= 0.5 && Math.abs(m.m42) <= 0.5) return;
+          if (tweening(probe) || tweening(el)) return;
+          try {
+            gsap.killTweensOf(probe);
+            gsap.set(probe, { clearProps: "transform" });
+          } catch {
+            probe.style.transform = "";
+          }
+        });
+        // (b) stuck curtains: covering + no active wipe → remove (content stays).
+        scope.querySelectorAll(".m-curtain").forEach((node) => {
+          const el = node as HTMLElement;
+          const m = matrix(el);
+          const scale = m ? Math.max(Math.abs(m.a), Math.abs(m.d)) : 0;
+          if (scale <= 0.02) return; // invisible: its trigger may still be pending
+          if (tweening(el)) return;
+          try {
+            el.remove();
+          } catch {
+            /* noop */
+          }
+        });
+        // (c) anti-blank: hidden word units / subheads in view, no active reveal.
+        scope.querySelectorAll("[data-m-hide]:not([data-m-done])").forEach((node) => {
+          const el = node as HTMLElement;
+          let r: DOMRect;
+          try {
+            r = el.getBoundingClientRect();
+          } catch {
+            return;
+          }
+          if (r.bottom <= 0 || r.top >= window.innerHeight * 0.9) return; // in view only
+          const probe = (el.querySelector(".m-wword") as HTMLElement | null) ?? el;
+          if (tweening(probe) || tweening(el)) return;
+          try {
+            gsap.killTweensOf(probe);
+            gsap.set(probe, { clearProps: "transform,opacity,visibility" });
+          } catch {
+            probe.style.transform = "";
+            probe.style.opacity = "1";
+          }
+          el.setAttribute("data-m-done", "1");
+        });
+      } catch {
+        /* watchdog never throws */
+      }
+    };
     const sweep = () => {
+      sweepStuck(document);
       try {
         document
           .querySelectorAll("[data-gsap],[data-m-hide]")
@@ -81,6 +158,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
           window.setTimeout(() => {
             try {
               if (scope.getAttribute("data-motion-done")) return;
+              sweepStuck(scope);
               scope
                 .querySelectorAll("[data-gsap]")
                 .forEach((node) => {

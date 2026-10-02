@@ -3,7 +3,8 @@
 /**
  * MotionScope — zero-layout wrapper that runs one section builder.
  * display:contents ⇒ zero layout change; server components stay server.
- * Everything runs inside gsap.context + matchMedia (live reduced-motion).
+ * Everything runs inside useGSAP's context + matchMedia (live reduced-motion).
+ * HMR/StrictMode: revertOnUpdate + mm.revert ⇒ clean teardown, no leaks.
  */
 
 import { useGSAP } from "@gsap/react";
@@ -37,38 +38,22 @@ export default function MotionScope({
       registry();
       const scopeEl = ref.current;
       if (!scopeEl || typeof window === "undefined") return;
-      const ctx = gsap.context(() => {
-        const mm = gsap.matchMedia();
-        mm.add("(prefers-reduced-motion: no-preference)", () => {
-          try {
-            const root = (scopeEl.firstElementChild ?? scopeEl) as Element;
-            const q = gsap.utils.selector(root);
-            const maybeCleanup = build({ q, root, mm }, h);
-            if (typeof maybeCleanup === "function") {
-              return () => {
-                try {
-                  maybeCleanup();
-                } catch {
-                  /* noop */
-                }
-              };
-            }
-            return undefined;
-          } catch {
-            return undefined;
-          }
-        });
-        return () => {
-          try {
-            mm.revert();
-          } catch {
-            /* noop */
-          }
-        };
-      }, scopeEl);
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        try {
+          const root = (scopeEl.firstElementChild ?? scopeEl) as Element | null;
+          if (!root) return undefined;
+          const q = gsap.utils.selector(root);
+          const cleanup = build({ q, root, mm }, h);
+          return typeof cleanup === "function" ? cleanup : undefined;
+        } catch {
+          // Builder failed: static content stays fully visible.
+          return undefined;
+        }
+      });
       return () => {
         try {
-          ctx.revert();
+          mm.revert();
         } catch {
           /* noop */
         }

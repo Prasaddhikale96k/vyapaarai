@@ -237,7 +237,11 @@ export const h = {
     }
   },
 
-  /** Word/line split that reverts on cleanup. Devanagari tokens stay atomic. */
+  /** Word/line split that reverts on cleanup. Devanagari tokens stay atomic:
+   *  text nodes split on whitespace; element children (accent spans, Devanagari)
+   *  become ONE unit each; BRs are never masked. Masks carry data-m-hide so the
+   *  watchdog can rescue a reveal that never fires. From-state is pre-set for
+   *  below-fold hosts and plays in the same frame when already in view. */
   splitHeading(
     el: Element,
     opts?: { type?: "lines" | "words" }
@@ -245,72 +249,124 @@ export const h = {
     if (isReduced() || typeof window === "undefined") return null;
     try {
       const type = opts?.type ?? "words";
+      void type;
       const host = el as HTMLElement;
+      // Never double-split, never split a host a section hook already owns
+      // (the CTA h2 splits its own words via data-gsap="word").
+      if (host.hasAttribute("data-gsap") || host.querySelector("[data-gsap]")) return null;
+      if (host.querySelector(".m-wmask")) return null;
       const original = host.innerHTML;
-      const label = host.textContent ?? "";
-      host.setAttribute("aria-label", label);
-      // Split top-level inline segments only; never inside a word/Devanagari token.
-      const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-      const texts: Text[] = [];
-      while (walker.nextNode()) {
-        const t = walker.currentNode as Text;
-        if (t.nodeValue && t.nodeValue.trim()) texts.push(t);
-      }
-      const devanagari = /[\u0900-\u097F]/;
-      texts.forEach((t) => {
+      const label = (host.textContent ?? "").replace(/\s+/g, " ").trim();
+      if (label) host.setAttribute("aria-label", label);
+
+      const makeUnit = (content: Node): HTMLElement | null => {
         try {
-          const parent = t.parentNode as HTMLElement | null;
-          if (!parent || parent !== host) {
-            // Nested spans (e.g. accent words): treat whole span as one unit.
-            return;
-          }
-          const words = (t.nodeValue ?? "").split(/(\s+)/);
-          const frag = document.createDocumentFragment();
-          words.forEach((w) => {
-            if (!w) return;
-            if (/^\s+$/.test(w)) {
-              frag.appendChild(document.createTextNode(w));
+          const mask = document.createElement("span");
+          mask.className = "m-wmask";
+          mask.setAttribute("aria-hidden", "true");
+          mask.setAttribute("data-m-hide", "");
+          const inner = document.createElement("span");
+          inner.className = "m-wword";
+          inner.appendChild(content);
+          mask.appendChild(inner);
+          return mask;
+        } catch {
+          return null;
+        }
+      };
+
+      const units: HTMLElement[] = [];
+      const frag = document.createDocumentFragment();
+      Array.from(host.childNodes).forEach((node) => {
+        try {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const raw = (node as Text).nodeValue ?? "";
+            if (!raw.trim()) {
+              if (raw) frag.appendChild(document.createTextNode(raw));
               return;
             }
-            const mask = document.createElement("span");
-            mask.setAttribute("aria-hidden", "true");
-            mask.className = "m-wmask";
-            const inner = document.createElement("span");
-            inner.className = "m-wword";
-            inner.textContent = w;
-            mask.appendChild(inner);
-            frag.appendChild(mask);
-          });
-          parent.replaceChild(frag, t);
+            raw.split(/(\s+)/).forEach((part) => {
+              if (!part) return;
+              if (/^\s+$/.test(part)) {
+                frag.appendChild(document.createTextNode(part));
+                return;
+              }
+              const m = makeUnit(document.createTextNode(part));
+              if (m) {
+                frag.appendChild(m);
+                const inner = m.firstElementChild as HTMLElement | null;
+                if (inner) units.push(inner);
+              }
+            });
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if ((node as HTMLElement).tagName === "BR") {
+              frag.appendChild(node);
+              return;
+            }
+            // Whole element = one atomic unit (accent spans, Devanagari words).
+            const m = makeUnit(node);
+            if (m) {
+              frag.appendChild(m);
+              const inner = m.firstElementChild as HTMLElement | null;
+              if (inner) units.push(inner);
+            }
+          } else {
+            frag.appendChild(node);
+          }
         } catch {
-          /* keep original text */
+          /* node stays as authored */
         }
       });
-      void type;
-      void devanagari;
-      const inners = host.querySelectorAll(".m-wword");
-      if (inners.length) {
-        // Anti-blank: from-state applied only when the trigger fires.
-        try {
-          gsap.from(inners, {
-            yPercent: 105,
-            duration: 0.9,
-            ease: easeOr("kOut", "expo.out"),
-            stagger: 0.1,
-            immediateRender: false,
-            scrollTrigger: { trigger: host, start: "top 90%", once: true },
-          });
-        } catch {
-          /* text stays visible */
-        }
+      if (!units.length) {
+        if (label) host.removeAttribute("aria-label");
+        return null;
       }
-      return () => {
+      host.replaceChildren(frag);
+
+      const showStatic = () => {
         try {
           host.innerHTML = original;
           host.removeAttribute("aria-label");
         } catch {
           /* noop */
         }
+      };
+      // Anti-blank: pre-set the from-state now (post-hydration, pre-paint).
+      try {
+        gsap.set(units, { yPercent: 105 });
+      } catch {
+        showStatic();
+        return null;
+      }
+      try {
+        const visible = inViewport(host);
+        gsap.to(units, {
+          yPercent: 0,
+          duration: 0.9,
+          ease: easeOr("kOut", "expo.out"),
+          stagger: 0.08,
+          immediateRender: false,
+          ...(visible
+            ? {}
+            : { scrollTrigger: { trigger: host, start: "top 90%", once: true } }),
+          onComplete: () => {
+            units.forEach((u) => {
+              const mask = u.parentElement as HTMLElement | null;
+              if (mask) mask.setAttribute("data-m-done", "1");
+            });
+            try {
+              gsap.set(units, { clearProps: "transform" });
+            } catch {
+              /* noop */
+            }
+          },
+        });
+      } catch {
+        showStatic();
+        return null;
+      }
+      return () => {
+        showStatic();
       };
     } catch {
       return null;
