@@ -78,7 +78,7 @@ function LedgerMock() {
         <span>Date</span><span>Item</span><span>Amount</span><span>Status</span>
       </div>
       {rows.map((r) => (
-        <div key={r[1]} data-gsap="ledger-row" className="grid grid-cols-4 gap-2 border-t px-4 py-2 text-xs" style={{ borderColor: "#E8DDD0", color: "#1A1209" }}>
+        <div key={r[1]} className="grid grid-cols-4 gap-2 border-t px-4 py-2 text-xs" style={{ borderColor: "#E8DDD0", color: "#1A1209" }}>
           <span>{r[0]}</span><span>{r[1]}</span><span className="font-mono">{r[2]}</span>
           <span style={{ color: r[3] === "pending" ? "#C0392B" : "#2D6A4F" }}>{r[3]}</span>
         </div>
@@ -137,16 +137,6 @@ export default function FeaturesBento() {
         stagger: 0.08,
         immediateRender: false,
         scrollTrigger: { trigger: root.current, start: "top 80%", once: true },
-      });
-      // Ledger receipt cascade (transform + opacity only, no layout shift)
-      gsap.from(root.current?.querySelectorAll('[data-gsap="ledger-row"]') ?? [], {
-        x: -15,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.12,
-        ease: "power2.out",
-        immediateRender: false,
-        scrollTrigger: { trigger: root.current, start: "top 75%", once: true },
       });
     },
     { scope: root }
