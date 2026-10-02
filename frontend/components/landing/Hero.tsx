@@ -8,14 +8,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import KiranaShopSVG, { WhatsAppGlyph } from "./KiranaShopSVG";
 import HeroStage from "./hero/HeroStage";
-import { EASE_EXPO, prefersReduced, scrollToId } from "./gsap-setup";
-
-gsap.registerPlugin(ScrollTrigger);
+import useHeroFilm from "./hero/useHeroFilm";
+import { scrollToId } from "./gsap-setup";
 
 const LINES: { text: string; accent?: boolean; italic?: boolean }[] = [
   { text: "Your Business's" },
@@ -27,19 +23,7 @@ export default function Hero() {
   const root = useRef<HTMLElement>(null);
   const [pastHint, setPastHint] = useState(false);
 
-  useGSAP(
-    () => {
-      if (prefersReduced()) return;
-      const q = gsap.utils.selector(root.current);
-      const tl = gsap.timeline({ defaults: { ease: EASE_EXPO } });
-      tl.from(q('[data-gsap="badge"]'), { y: -20, opacity: 0, duration: 0.6 }, 0.2)
-        .from(q('[data-gsap="mask"]'), { yPercent: 110, duration: 0.9, stagger: 0.12 }, 0.3)
-        .fromTo(q('[data-gsap="sub"]'), { opacity: 0.3 }, { opacity: 1, duration: 0.8 }, 0.7)
-        .from(q('[data-gsap="cta"]'), { y: 20, opacity: 0.2, duration: 0.6, stagger: 0.1 }, 1.0)
-        .from(q('[data-gsap="trust"]'), { opacity: 0.2, duration: 0.6 }, 1.2);
-    },
-    { scope: root }
-  );
+  useHeroFilm(root);
 
   useEffect(() => {
     const fn = () => setPastHint(window.scrollY > 200);
@@ -67,7 +51,7 @@ export default function Hero() {
       <div className="relative z-10 mx-auto w-full max-w-5xl">
         <span
           data-gsap="badge"
-          className="mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium"
+          className="relative mb-6 inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium"
           style={{ background: "#FFF3E0", borderColor: "rgba(232,119,26,0.3)", color: "#B85A00" }}
         >
           <WhatsAppGlyph />
@@ -107,7 +91,7 @@ export default function Hero() {
             data-gsap="cta"
             data-m="hero.btn"
             href="/register"
-            className="inline-flex min-h-[56px] flex-shrink-0 items-center justify-center rounded-full px-8 py-4 text-lg font-semibold text-white transition-transform focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="relative inline-flex min-h-[56px] flex-shrink-0 items-center justify-center rounded-full px-8 py-4 text-lg font-semibold text-white transition-transform focus-visible:outline-2 focus-visible:outline-offset-4"
             style={{ background: "#E8771A", outlineColor: "#E8771A", textDecoration: "none", boxShadow: "0 0 40px rgba(232,119,26,0.25)" }}
           >
             See It Work →
@@ -116,7 +100,7 @@ export default function Hero() {
             data-gsap="cta"
             data-m="hero.btn"
             onClick={() => scrollToId("how-it-works")}
-            className="inline-flex min-h-[56px] flex-shrink-0 items-center justify-center gap-2 rounded-full border px-8 py-4 text-lg font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
+            className="relative inline-flex min-h-[56px] flex-shrink-0 items-center justify-center gap-2 rounded-full border px-8 py-4 text-lg font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-4"
             style={{ borderColor: "#E8DDD0", color: "#1A1209", background: "transparent", outlineColor: "#E8771A" }}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">

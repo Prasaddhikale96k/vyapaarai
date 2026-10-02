@@ -74,9 +74,11 @@ export const buildNav: BuildFn = withHeadings(() => {
 });
 
 export const buildHero: BuildFn = withHeadings((ctx) => {
-  // NOTE: the scroll-hint bounce is owned by the CSS .landing-bob animation
-  // (CSS animation origin beats GSAP's inline transform — a GSAP loop here
-  // would be dead code). The G6 observer pauses it offscreen instead.
+  // HERO FILM owns this section when its stage is mounted (same CTA life via
+  // the shared buttonLife system, watermark + residue via the film) — yielding
+  // here avoids double-driving the same elements. The film hook reuses the
+  // motion registry + governor, so nothing is duplicated.
+  if (ctx.root.querySelector('[data-hf="stage"]')) return undefined;
   const c: Array<() => void> = [];
   const bl = buttonLife(ctx);
   if (bl) c.push(bl);

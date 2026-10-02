@@ -357,3 +357,29 @@
   .hf-obj { display: none; }
   .hf-obj.hf-keep-sm { display: block; }
 }
+/* Kinetic-typography units (runtime-wrapped only; static text unaffected). */
+.hf-wmask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+.hf-wword {
+  display: inline-block;
+  will-change: transform;
+}
+.hf-hl {
+  position: absolute;
+  left: -1%;
+  right: -1%;
+  bottom: 0.06em;
+  height: 0.34em;
+  background: rgba(232,119,26,0.35);
+  border-radius: 2px;
+  z-index: -1;
+}
+.hf-trustseg { display: inline-block; }
+.hf-arrow { display: inline-block; }
+/* TEXT-SAFE demotion (runtime, §7.6): intersecting objects drop to ≤.28. */
+.hf-demote { opacity: 0.28 !important; }
