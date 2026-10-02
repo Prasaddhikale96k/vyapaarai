@@ -10,11 +10,41 @@
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { registry } from "./registry";
+
+/** G6 — pause CSS marquee/ping/bob loops whenever they leave the viewport
+ *  (toggles .m-paused; landing.css maps it to animation-play-state:paused).
+ *  Independent of the desktop gate below: mobile benefits most. */
+function useCssLoopPause(): void {
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") return;
+    if (!window.matchMedia("(prefers-reduced-motion: no-preference)").matches) return;
+    const targets = Array.from(
+      document.querySelectorAll<HTMLElement>(".landing-marquee, .landing-bob, .landing-ping-ring")
+    );
+    if (!targets.length) return;
+    const ob = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          const el = e.target as HTMLElement;
+          if (e.isIntersecting) el.classList.remove("m-paused");
+          else el.classList.add("m-paused");
+        });
+      },
+      { rootMargin: "15% 0px" }
+    );
+    targets.forEach((t) => ob.observe(t));
+    return () => {
+      ob.disconnect();
+      targets.forEach((t) => t.classList.remove("m-paused"));
+    };
+  }, []);
+}
 
 export default function Overlays() {
   const ref = useRef<HTMLDivElement>(null);
+  useCssLoopPause();
 
   useGSAP(
     () => {
