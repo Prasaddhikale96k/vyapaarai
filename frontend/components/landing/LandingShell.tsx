@@ -23,6 +23,20 @@ export default function LandingShell({ children }: { children: React.ReactNode }
   // elements (data-m only, never data-gsap): glows, cones, ghosts, shadows.
   useEffect(() => {
     let idleT: ReturnType<typeof setTimeout> | null = null;
+    // Hook-owned check: an element with an authored/preset inline opacity of 0
+    // (WhatsApp typing indicator), or with a live OR pending GSAP tween, is
+    // under a section hook's control — the watchdog must never force-show it
+    // (that would spoil cues like the chat film or the soul-mark reveal).
+    const hookOwned = (el: HTMLElement): boolean => {
+      try {
+        if (el.style && el.style.opacity === "0") return true;
+        if (gsap.isTweening(el)) return true;
+        if (gsap.getTweensOf(el).length > 0) return true;
+      } catch {
+        /* fall through to force-show */
+      }
+      return false;
+    };
     // STUCK sweep — the transform-side companion to the opacity sweep above.
     // (a) word masks that FINISHED (data-m-done) but left a residual translate;
     // (b) curtain overlays still covering content with no active wipe → removed;
@@ -122,11 +136,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
               return;
             }
             if (opacity >= 0.05) return;
-            try {
-              if (gsap.isTweening(el)) return;
-            } catch {
-              /* fall through to force-show */
-            }
+            if (hookOwned(el)) return;
             try {
               gsap.killTweensOf(el);
               gsap.set(el, { clearProps: "opacity,transform,visibility" });
@@ -164,6 +174,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
                 .forEach((node) => {
                   const el = node as HTMLElement;
                   if (el.hasAttribute("data-m") && !el.hasAttribute("data-gsap")) return;
+                  if (hookOwned(el)) return;
                   let o = 1;
                   try {
                     o = parseFloat(window.getComputedStyle(el).opacity || "1");
