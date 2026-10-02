@@ -70,6 +70,7 @@ export default function CTASection() {
       </p>
       <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
         <Link
+          data-m="cta.btn"
           href="/register"
           onClick={() => {
             void celebrate();

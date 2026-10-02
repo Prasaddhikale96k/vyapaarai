@@ -167,6 +167,26 @@
   }
 }
 
+/* G1 bookmark ribbon: display:none by default (reduced-motion + mobile safe).
+   Shown only on desktop AND when motion is allowed — zero layout impact either
+   way (position:fixed does not enter flow). */
+.m-ribbon {
+  display: none;
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+  .m-ribbon {
+    display: block;
+    position: fixed;
+    right: 10px;
+    top: 0;
+    width: 6px;
+    height: 100vh;
+    z-index: 40;
+    pointer-events: none;
+    transform-origin: top center;
+  }
+}
+
 /* ---------- Motion layer (.m-*, additive only; gated to no-preference) ---------- */
 @media (prefers-reduced-motion: no-preference) {
   /* Offscreen CSS-loop pause (governor toggles .m-paused via IntersectionObserver). */
@@ -192,32 +212,14 @@
   .m-curtain {
     z-index: 1;
   }
-  /* Bookmark progress ribbon (G1, desktop only; mounted by Overlays). */
-  .m-ribbon {
-    position: fixed;
-    right: 10px;
-    top: 0;
-    width: 6px;
-    height: 100vh;
-    z-index: 40;
-    pointer-events: none;
-    transform-origin: top center;
-  }
-  /* Primary CTA shine sweep (overlay translating X, transform only). */
+
+  /* Primary CTA shine sweep (overlay translating X, transform only).
+     .m-shine is the clipping container; .m-shine-bar is the animating strip. */
   .m-shine {
     position: absolute;
     inset: 0;
     overflow: hidden;
     pointer-events: none;
     border-radius: inherit;
-  }
-  .m-shine::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 40%;
-    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
-    transform: translateX(-120%);
   }
 }

@@ -290,13 +290,13 @@ export const h = {
       void devanagari;
       const inners = host.querySelectorAll(".m-wword");
       if (inners.length) {
+        // Anti-blank: from-state applied only when the trigger fires.
         try {
-          gsap.set(inners, { yPercent: 105 });
-          gsap.to(inners, {
-            yPercent: 0,
+          gsap.from(inners, {
+            yPercent: 105,
             duration: 0.9,
             ease: easeOr("kOut", "expo.out"),
-            stagger: 0.08,
+            stagger: 0.1,
             immediateRender: false,
             scrollTrigger: { trigger: host, start: "top 90%", once: true },
           });

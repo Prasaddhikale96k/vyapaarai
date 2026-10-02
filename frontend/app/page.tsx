@@ -1,5 +1,6 @@
 import LandingShell from "@/components/landing/LandingShell";
 import MotionScope from "@/components/landing/motion/MotionScope";
+import Overlays from "@/components/landing/motion/Overlays";
 import {
   buildBento,
   buildCta,
@@ -40,6 +41,7 @@ import Footer from "@/components/landing/Footer";
 export default function HomePage() {
   return (
     <LandingShell>
+      <Overlays />
       <main style={{ background: "#FDFAF4", color: "#1A1209" }}>
         <MotionScope id="hero" build={buildHero}><Hero /></MotionScope>
         <MotionScope id="marquee" build={buildMarquee}><SocialProofBar /></MotionScope>
