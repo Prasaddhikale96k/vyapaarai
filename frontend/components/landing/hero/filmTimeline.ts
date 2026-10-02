@@ -9,8 +9,6 @@ import {
   splitWords,
   splitTrust,
   wrapArrow,
-  addSwash,
-  addWaUnderline,
   addHighlights,
 } from "./typography";
 
@@ -124,9 +122,6 @@ export function buildIntro(root: HTMLElement, mm: gsap.MatchMedia): IntroBuild |
     if (ctas[0]) arrowOff = wrapArrow(ctas[0]);
     if (arrowOff) cleanups.push(arrowOff);
 
-    // Accent line = the italic mask (attribute-selected, never by index).
-    const accent = inners.find((el) => (el as HTMLElement).style.fontStyle === "italic") ?? inners[1];
-    const waLine = inners[inners.length - 1];
     const targets: Element[] = [
       ...(badge ? [badge] : []),
       ...inners,
@@ -217,24 +212,6 @@ export function buildIntro(root: HTMLElement, mm: gsap.MatchMedia): IntroBuild |
       tl.to(floats, { y: 0, scale: 1, duration: 1.1, stagger: 0.07 }, 0.6);
     // 1.40 trust segments.
     if (trustSplit) tl.to(trustSplit.segs, { opacity: 1, duration: 0.6, stagger: 0.12 }, 1.4);
-    // 1.60 swash (measured lazily — post-font).
-    tl.call(
-      () => {
-        try {
-          const s = addSwash(accent);
-          if (s) {
-            const len = s.path.getTotalLength();
-            gsap.set(s.path, { strokeDasharray: len, strokeDashoffset: len });
-            gsap.to(s.path, { strokeDashoffset: 0, duration: 0.9, ease: easeOr("kPen", "power1.inOut") });
-            cleanups.push(s.remove);
-          }
-        } catch {
-          /* swash skipped */
-        }
-      },
-      [],
-      1.6
-    );
     // 1.70 sub-headline + 2.0 highlights.
     tl.to(subSplit.words, { yPercent: 0, duration: 0.8, stagger: 0.1 }, 1.7);
     if (bars.length) tl.to(bars, { scaleX: 1, duration: 0.5, ease: easeOr("kPen", "power1.inOut"), stagger: 0.25 }, 2.0);
@@ -243,28 +220,6 @@ export function buildIntro(root: HTMLElement, mm: gsap.MatchMedia): IntroBuild |
       spokes.forEach((p, i) => {
         if (spokeLens[i] > 0) tl.to(p, { strokeDashoffset: 0, duration: 0.9, ease: "power1.inOut" }, 1.9 + i * 0.12);
       });
-    // 2.00 WhatsApp underline + tail (measured lazily).
-    tl.call(
-      () => {
-        try {
-          const ov = addWaUnderline(waLine);
-          if (ov && "path" in ov) {
-            const len = (ov as { path: SVGPathElement }).path.getTotalLength();
-            gsap.set((ov as { path: SVGPathElement }).path, { strokeDasharray: len, strokeDashoffset: len });
-            gsap.to((ov as { path: SVGPathElement }).path, {
-              strokeDashoffset: 0,
-              duration: 0.8,
-              ease: easeOr("kPen", "power1.inOut"),
-            });
-            cleanups.push((ov as { remove: () => void }).remove);
-          }
-        } catch {
-          /* underline skipped */
-        }
-      },
-      [],
-      2.0
-    );
     // 2.20 CTAs rise.
     if (ctas.length) tl.to(ctas, { y: 0, opacity: 1, duration: 0.7, stagger: 0.1 }, 2.2);
 

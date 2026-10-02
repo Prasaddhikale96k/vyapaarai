@@ -701,7 +701,8 @@ Downgrades: border shimmer→ping only (overflow-clip conflict) · CTA glow-ring
 Skill rules applied (≥6): see check 20.
 Changed files (fc15e7e..HEAD): Hero.tsx; hero/{HeroStage,constants,Obj,typography,filmTimeline,useHeroFilm,ambient,story,fx,layers×8,objects×10}; motion/{Overlays (G6 selector), sections (buildHero yield)}; styles/landing.css (append .hf-); PROJECT_STATUS.md; tsconfig.tsbuildinfo; frontend/.opencode/skills/gsap (in hero-0). Backend/app/admin/login/register/auth/lib/hooks/verify/layout/tailwind/KiranaShop untouched.
 Known limitations: zero browser proof (checks 8–17 human); swash measured at 1.6s (pre-font risk, human to eyeball); scatter measured at build (scroll-stable sign only); dev+build must never run concurrently (bit us once — .next contention); first-viewport fit unproven at 1440×900.
-Commits: fc15e7e [hero-0] · ab97d90 [hero-1] · cbff7c2 [hero-2] · b04ed75 [hero-3] · 50f6cc4 [hero-4] · 2642620 [hero-5] · 25227c8 [hero-6] · [hero-7] verified (this).
+Commits: fc15e7e [hero-0] · ab97d90 [hero-1] · cbff7c2 [hero-2] · b04ed75 [hero-3] · 50f6cc4 [hero-4] · 2642620 [hero-5] · 25227c8 [hero-6] · dd8f833 [hero-7] · [hero-8] below.
+- hero-8: owner request — removed both H1 underline overlays (AI Brain swash + green WhatsApp underline + tail doodle). Sheen, sparkles, masks and everything else untouched; helpers kept exported in typography.ts. tsc 0, dev / 200.
 
 ## LANDING MOTION GRAPHICS — PHASES 1–5 (2026-10-02)
 
