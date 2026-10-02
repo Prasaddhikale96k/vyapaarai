@@ -432,3 +432,5 @@
   white-space: nowrap;
   pointer-events: none;
 }
+/* Coins alone re-enable pointer (easter-egg flick); stage stays click-through. */
+[data-hf^="obj-coin"] { pointer-events: auto; }

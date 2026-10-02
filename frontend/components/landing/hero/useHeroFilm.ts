@@ -9,6 +9,7 @@ import { buildIntro, textSafe } from "./filmTimeline";
 import type { IntroBuild } from "./filmTimeline";
 import { buildAmbient } from "./ambient";
 import { buildStory } from "./story";
+import { buildPointer, buildSpotlight, buildCoinFlick, buildSkew, buildScrollExit } from "./fx";
 
 function preloaderGone(): boolean {
   try {
@@ -50,6 +51,7 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
         let played = false;
         let ambientOff: (() => void) | null = null;
         let storyOff: (() => void) | null = null;
+        const fxOffs: Array<() => void> = [];
         const timers: Array<ReturnType<typeof setTimeout>> = [];
         const pollId: Array<ReturnType<typeof setInterval>> = [];
 
@@ -151,6 +153,33 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
               clearInterval(ambPoll);
               ambientOff = buildAmbient(root);
               storyOff = buildStory(root);
+              // Phase 5 last (I1, then scroll exit, then I4/I2/I3/I5).
+              try {
+                fxOffs.push(buildPointer(root));
+              } catch {
+                /* pointer off */
+              }
+              try {
+                const se = buildScrollExit(root);
+                if (se) fxOffs.push(se);
+              } catch {
+                /* scrub dropped, film continues */
+              }
+              try {
+                fxOffs.push(buildSpotlight(root));
+              } catch {
+                /* noop */
+              }
+              try {
+                fxOffs.push(buildCoinFlick(root));
+              } catch {
+                /* noop */
+              }
+              try {
+                fxOffs.push(buildSkew(root));
+              } catch {
+                /* noop */
+              }
             }
           } catch {
             clearInterval(ambPoll);
@@ -203,6 +232,13 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
             }
             storyOff = null;
           }
+          fxOffs.splice(0).forEach((fn) => {
+            try {
+              fn();
+            } catch {
+              /* noop */
+            }
+          });
           try {
             intro.cleanup();
           } catch {
