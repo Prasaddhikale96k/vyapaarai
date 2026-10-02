@@ -416,3 +416,19 @@
   clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
   pointer-events: none;
 }
+/* Toast pills (runtime-fed, aria-hidden, desktop only by JS gate). */
+.hf-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fffdf8;
+  border: 1px solid #e8ddd0;
+  border-radius: 9999px;
+  padding: 8px 14px 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1209;
+  box-shadow: 0 6px 22px rgba(26,18,9,0.12);
+  white-space: nowrap;
+  pointer-events: none;
+}

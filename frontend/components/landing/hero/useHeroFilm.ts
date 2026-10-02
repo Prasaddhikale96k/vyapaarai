@@ -8,6 +8,7 @@ import { registry } from "../motion/registry";
 import { buildIntro, textSafe } from "./filmTimeline";
 import type { IntroBuild } from "./filmTimeline";
 import { buildAmbient } from "./ambient";
+import { buildStory } from "./story";
 
 function preloaderGone(): boolean {
   try {
@@ -48,6 +49,7 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
         let build: IntroBuild | null = null;
         let played = false;
         let ambientOff: (() => void) | null = null;
+        let storyOff: (() => void) | null = null;
         const timers: Array<ReturnType<typeof setTimeout>> = [];
         const pollId: Array<ReturnType<typeof setInterval>> = [];
 
@@ -142,12 +144,13 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
           }
         }, 100);
         pollId.push(poll);
-        // Ambient starts only after the intro settles (same props, no fight).
+        // Ambient + story start only after the intro settles (same props, no fight).
         const ambPoll = setInterval(() => {
           try {
             if (build && build.isDone() && !ambientOff) {
               clearInterval(ambPoll);
               ambientOff = buildAmbient(root);
+              storyOff = buildStory(root);
             }
           } catch {
             clearInterval(ambPoll);
@@ -191,6 +194,14 @@ export default function useHeroFilm(rootRef: RefObject<HTMLElement | null>): voi
               /* noop */
             }
             ambientOff = null;
+          }
+          if (storyOff) {
+            try {
+              storyOff();
+            } catch {
+              /* noop */
+            }
+            storyOff = null;
           }
           try {
             intro.cleanup();
