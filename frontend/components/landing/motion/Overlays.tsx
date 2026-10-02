@@ -21,7 +21,7 @@ function useCssLoopPause(): void {
     if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") return;
     if (!window.matchMedia("(prefers-reduced-motion: no-preference)").matches) return;
     const targets = Array.from(
-      document.querySelectorAll<HTMLElement>(".landing-marquee, .landing-bob, .landing-ping-ring")
+      document.querySelectorAll<HTMLElement>(".landing-marquee, .landing-bob, .landing-ping-ring, .hf-grain")
     );
     if (!targets.length) return;
     const ob = new IntersectionObserver(

@@ -434,3 +434,18 @@
 }
 /* Coins alone re-enable pointer (easter-egg flick); stage stays click-through. */
 [data-hf^="obj-coin"] { pointer-events: auto; }
+/* L6 grain loop: sub-threshold steps, desktop + no-preference only. */
+@keyframes hf-grain {
+  0% { transform: translate(0, 0); }
+  12.5% { transform: translate(-2%, 1%); }
+  25% { transform: translate(1%, -2%); }
+  37.5% { transform: translate(-1%, 2%); }
+  50% { transform: translate(2%, 1%); }
+  62.5% { transform: translate(-2%, -1%); }
+  75% { transform: translate(1%, 2%); }
+  87.5% { transform: translate(2%, -2%); }
+  100% { transform: translate(0, 0); }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 1024px) {
+  .hf-grain { animation: hf-grain 0.9s steps(8) infinite; }
+}

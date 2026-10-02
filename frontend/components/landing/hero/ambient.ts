@@ -2,7 +2,7 @@
 
 import gsap from "gsap";
 import { easeOr, isMobile } from "../motion/registry";
-import { registerLoop, unregisterLoop } from "../motion/governor";
+import { registerLoop, unregisterLoop, runningLoopCount } from "../motion/governor";
 
 /**
  * HERO FILM ambient life (§11 desync table + §10 idle pieces).
@@ -657,6 +657,31 @@ export function buildAmbient(root: Element): () => void {
     }
   } catch {
     /* noop */
+  }
+
+  // ---- Tier C: light-leak sweep (14s cycle; skipped when busy) ----
+  try {
+    if (!mobile && runningLoopCount() <= 12) {
+      const leak = root.querySelector<HTMLElement>('[data-hf="layer-leak"]');
+      if (leak) {
+        loop(
+          "leak",
+          () => {
+            const tl = gsap.timeline({ repeat: -1, repeatDelay: 10.8 });
+            tl.fromTo(
+              leak,
+              { xPercent: 0 },
+              { xPercent: 383, duration: 3.2, ease: "power1.inOut" }
+            );
+            return tl;
+          },
+          1,
+          "B"
+        );
+      }
+    }
+  } catch {
+    /* leak stays parked */
   }
 
   return () => {
