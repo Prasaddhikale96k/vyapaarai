@@ -12,7 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app import config as _cfg
 from app.limits import limiter
-from app.db import Base, engine, ensure_access_schema, ensure_chat_thread_schema, ensure_contacts_schema, ensure_p4_schema, ensure_p15_schema, ensure_prod_schema
+from app.db import Base, engine, ensure_access_schema, ensure_chat_thread_schema, ensure_connectors_schema, ensure_contacts_schema, ensure_p4_schema, ensure_p15_schema, ensure_prod_schema
 from app.routers import actions, auth, chat, connectors, contacts, data, documents, ingest, intelligence, public, reports, whatsapp
 from app.services.sync import start_watchers, startup_scan, stop_watchers
 
@@ -111,6 +111,7 @@ async def lifespan(app: FastAPI):
     ensure_p15_schema()
     ensure_chat_thread_schema()
     ensure_contacts_schema()
+    ensure_connectors_schema()
     ensure_prod_schema()
     try:
         startup_scan()  # restart-safe: ledger skips already-ingested files

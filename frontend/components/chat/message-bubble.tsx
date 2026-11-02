@@ -9,8 +9,9 @@ export function renderLite(text: string) {
   return parts.map((p, i) => {
     const m = p.match(/^\*\*([^*]+)\*\*$/);
     if (m) {
+      // No hardcoded color: inherits bubble text (white on user-green, ink on AI card).
       return (
-        <strong key={i} className="font-semibold text-zinc-50">
+        <strong key={i} className="font-semibold">
           {m[1]}
         </strong>
       );

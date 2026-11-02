@@ -418,6 +418,49 @@ def ensure_chat_thread_schema() -> None:
         pass
 
 
+def ensure_connectors_schema() -> None:
+    """Connect-hub: connectors.api_key (Zapier/Make/custom API auth).
+
+    Additive + non-destructive, idempotent, sqlite+PG safe, never raises.
+    """
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text as _text
+
+        is_sqlite = str(engine.url).startswith("sqlite")
+        with engine.connect() as conn:
+            if is_sqlite:
+                try:
+                    rows = conn.execute(_text("PRAGMA table_info(connectors)")).fetchall()
+                    have = {r[1] for r in rows} if rows else set()
+                except Exception:
+                    have = set()
+                if "connectors" in {
+                    t[0] for t in
+                    conn.execute(_text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()
+                } and "api_key" not in have:
+                    try:
+                        conn.execute(_text("ALTER TABLE connectors ADD COLUMN api_key VARCHAR(64)"))
+                        conn.commit()
+                    except Exception:
+                        pass
+            else:
+                try:
+                    conn.execute(_text(
+                        "ALTER TABLE connectors ADD COLUMN IF NOT EXISTS api_key VARCHAR(64)"))
+                    conn.commit()
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
 def ensure_prod_schema() -> None:
     """Production indexes for Postgres (idempotent, PG-only, never raises).
 

@@ -1,10 +1,28 @@
-"""Daily one-page PDF report (WhatsApp + Web). Pure reportlab platypus. Never raises."""
+"""VyapaarAI reports — Bahi-Khata branded PDFs (WhatsApp + Web + Bank).
+
+Design: saffron brand band, ledger section bars, KPI cards, hand-drawn-feel
+bar charts (reportlab Drawing), stamp boxes. Latin-only text (Helvetica has
+no Devanagari). Every builder never raises — minimal fallback PDF on failure.
+"""
 
 import io
 import logging
 from datetime import date, datetime, timedelta
 
 logger = logging.getLogger("vyapaarai.reports")
+
+# --- brand (mirrors frontend landing tokens) ---
+SAFFRON = "#E8771A"
+SAFFRON_DARK = "#B85A00"
+SAFFRON_SOFT = "#FFF3E0"
+EMERALD = "#065F46"
+EMERALD_SOFT = "#ECFDF5"
+GOLD_SOFT = "#FEF3C7"
+ROSE = "#C0392B"
+ROSE_SOFT = "#FEE2E2"
+INK = "#1A1209"
+MUTED = "#8B7355"
+LINE = "#E8DDD0"
 
 
 def _oid(owner_id) -> int:
@@ -17,33 +35,376 @@ def _oid(owner_id) -> int:
 
 def _inr(x) -> str:
     try:
-        return f"₹{int(round(float(x or 0))):,}"
+        return f"Rs.{int(round(float(x or 0))):,}"
     except Exception:
-        return "₹0"
+        return "Rs.0"
 
 
-def build_daily_pdf(db, owner_id: int = 1) -> bytes:
-    """ONE-page A4 daily report. Returns PDF bytes (always, never raises)."""
+_LATIN_MAP = {
+    "₹": "Rs.", "—": "-", "–": "-", "•": "-", "·": "-",
+    "✓": "(ok)", "✅": "(ok)", "⚡": "*", "📄": "",
+    "❌": "X", "⏳": "", "🙏": "", "→": "->", "←": "<-",
+    "’": "'", "‘": "'", "“": '"', "”": '"', "…": "...",
+}
+
+
+def _tx(s) -> str:
+    """Engine text -> PDF-safe latin (Helvetica me tofu boxes nahi)."""
+    try:
+        t = str(s or "")
+    except Exception:
+        return "-"
+    for k, v in _LATIN_MAP.items():
+        t = t.replace(k, v)
+    out = "".join(ch for ch in t if ord(ch) < 256)
+    out = " ".join(out.split())
+    return out or "-"
+
+
+def _ai_advice(facts: str, kind: str) -> list:
+    """Best-model AI Salah (groq->gemini->openrouter chain, deterministic fallback).
+
+    kind = "daily" | "credit". Returns max 5 PDF-safe lines. Never raises —
+    LLM down ho to facts se seedhi lines (demo_fallback jaisa bharosa).
+    """
+    fallback = [ln.strip() for ln in facts.split("|") if ln.strip()][:5]
+    try:
+        from app.services import llm as llm_mod
+
+        if kind == "credit":
+            system = ("You are VyapaarAI credit adviser for an Indian kirana/MSME owner. "
+                      "Given credit facts, write EXACTLY 4 short Hinglish lines: "
+                      "1 sabse badi kamzori, 2 use sudharne ka upay, 3 bank ko khush karne wali baat, "
+                      "4 is mahine ka ek action. No jargon, no English-only. Plain lines, no numbering.")
+            user = f"Credit facts: {facts}"
+        else:
+            system = ("You are VyapaarAI adviser for an Indian kirana/MSME owner. "
+                      "Given shop facts, write EXACTLY 4 short Hinglish lines: "
+                      "1 aaj ki sabse zaroori baat, 2 paisa vasoolne ka upay, "
+                      "3 stock ka upay, 4 kal ka pehla kaam. Plain lines, no numbering.")
+            user = f"Shop facts: {facts}"
+        res = llm_mod.complete_text(system, user, max_tokens=400)
+        text = str((res or {}).get("text", "") or "")
+        lines = []
+        for ln in text.replace("\r", "\n").split("\n"):
+            ln = ln.strip().lstrip("0123456789.-•* ").strip()
+            if len(ln) >= 12:
+                lines.append(_tx(ln)[:220])
+            if len(lines) >= 5:
+                break
+        prov = str((res or {}).get("provider", "") or "")
+        if lines and prov != "demo_fallback":
+            return lines
+    except Exception as exc:
+        logger.info("ai advice fallback: %s", str(exc)[:150])
+    return [_tx(ln)[:220] for ln in fallback][:5]
+
+
+def _tone(score) -> str:
+    try:
+        s = float(score or 0)
+    except Exception:
+        return MUTED
+    if s >= 65:
+        return EMERALD
+    if s >= 50:
+        return SAFFRON_DARK
+    return ROSE
+
+
+# ---------------------------------------------------------------------------
+# Shared brand kit
+# ---------------------------------------------------------------------------
+
+def _styles():
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+
+    base = getSampleStyleSheet()
+    return {
+        "title": ParagraphStyle("rTitle", parent=base["Heading1"], fontSize=17,
+                                leading=20, textColor=colors.HexColor(INK), spaceAfter=0),
+        "kicker": ParagraphStyle("rKicker", parent=base["Normal"], fontSize=8,
+                                 leading=10, textColor=colors.HexColor(SAFFRON_DARK),
+                                 spaceAfter=1),
+        "sub": ParagraphStyle("rSub", parent=base["Normal"], fontSize=8.5,
+                              leading=11, textColor=colors.HexColor(MUTED)),
+        "sec": ParagraphStyle("rSec", parent=base["Heading2"], fontSize=11,
+                              leading=14, textColor=colors.HexColor(INK), spaceAfter=0,
+                              spaceBefore=0),
+        "secsub": ParagraphStyle("rSecSub", parent=base["Normal"], fontSize=7.5,
+                                 leading=10, textColor=colors.HexColor(MUTED)),
+        "cell": ParagraphStyle("rCell", parent=base["Normal"], fontSize=8,
+                               leading=10.5, textColor=colors.HexColor(INK)),
+        "cellmut": ParagraphStyle("rCellMut", parent=base["Normal"], fontSize=8,
+                                  leading=10.5, textColor=colors.HexColor(MUTED)),
+        "kpinum": ParagraphStyle("rKpiNum", parent=base["Normal"], fontSize=14,
+                                 leading=16, textColor=colors.HexColor(INK)),
+        "kpilab": ParagraphStyle("rKpiLab", parent=base["Normal"], fontSize=7.5,
+                                 leading=9, textColor=colors.HexColor(MUTED)),
+        "stamp": ParagraphStyle("rStamp", parent=base["Normal"], fontSize=13,
+                                leading=15, textColor=colors.HexColor(INK)),
+        "quote": ParagraphStyle("rQuote", parent=base["Normal"], fontSize=8.5,
+                                leading=12, textColor=colors.HexColor(INK),
+                                leftIndent=8, borderPadding=4),
+    }
+
+
+def _top_rule(width_mm: float):
+    """Saffron brand band with thin gold under-line."""
+    from reportlab.lib import colors
     from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Table, TableStyle
 
-    from app.services import intelligence as eng
+    t = Table([[""]], colWidths=[width_mm * mm], rowHeights=[3.2 * mm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(SAFFRON)),
+        ("LINEBELOW", (0, 0), (-1, -1), 1.2, colors.HexColor(SAFFRON_DARK)),
+    ]))
+    return t
 
-    oid = _oid(owner_id)
-    today = date.today()
 
-    # --- owner + business name ---
-    biz = ""
+def _section_head(title: str, hint: str = ""):
+    """Ledger section header: saffron spine bar + title + hint."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    st = _styles()
+    title, hint = _tx(title), _tx(hint)
+    left = Table([[""]], colWidths=[2.2 * mm], rowHeights=[7 * mm])
+    left.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(SAFFRON)),
+        ("ROUNDEDCORNERS", [1 * mm, 1 * mm, 1 * mm, 1 * mm]),
+    ]))
+    title_p = Paragraph(f"<b>{title}</b>", st["sec"])
+    if hint:
+        body = Table([[title_p], [Paragraph(hint, st["secsub"])]],
+                     colWidths=[160 * mm])
+        body.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        body = Table([[title_p]], colWidths=[160 * mm])
+        body.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 3 * mm)]))
+    outer = Table([[left, body]], colWidths=[4 * mm, 164 * mm])
+    outer.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+    return outer
+
+
+def _kpi_strip(cards: list):
+    """Row of tinted KPI mini-cards: [(label, value, delta, tone)]."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    st = _styles()
+    n = max(len(cards), 1)
+    w = 168.0 / n
+    row, bgs = [], []
+    for i, (label, value, delta, tone) in enumerate(cards):
+        inner = [
+            [Paragraph(f"<b>{value}</b>", st["kpinum"])],
+            [Paragraph(label, st["kpilab"])],
+        ]
+        if delta:
+            inner.append([Paragraph(
+                f"<font color='{tone}'>{delta}</font>", st["kpilab"])])
+        cell = Table(inner, colWidths=[(w - 4) * mm])
+        cell.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 2 * mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 1.5 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5 * mm),
+        ]))
+        row.append(cell)
+        bgs.append(tone)
+    t = Table([row], colWidths=[w * mm] * n, spaceBefore=2 * mm, spaceAfter=2 * mm)
+    style = [
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 1.5 * mm),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 1.5 * mm),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor(LINE)),
+        ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor(LINE)),
+    ]
+    for i, tone in enumerate(bgs):
+        soft = {"#065F46": EMERALD_SOFT, "#B85A00": SAFFRON_SOFT,
+                "#C0392B": ROSE_SOFT}.get(str(tone).upper(), SAFFRON_SOFT)
+        style.append(("BACKGROUND", (i, 0), (i, 0), colors.HexColor(soft)))
+    t.setStyle(TableStyle(style))
+    return t
+
+
+def _score_bar(score, width_mm: float = 120.0):
+    """Ledger score bar: filled tone segment + ink remainder + big number."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    st = _styles()
+    try:
+        s = max(0.0, min(100.0, float(score or 0)))
+    except Exception:
+        s = 0.0
+    tone = _tone(s)
+    fill = max(width_mm * s / 100.0, 2.0 if s > 0 else 0.0)
+    bar = Table([["", ""]], colWidths=[fill * mm, max(width_mm - fill, 0.5) * mm],
+                rowHeights=[4.5 * mm])
+    bar.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, 0), colors.HexColor(tone)),
+        ("BACKGROUND", (1, 0), (1, 0), colors.HexColor(LINE)),
+        ("ROUNDEDCORNERS", [2 * mm, 2 * mm, 2 * mm, 2 * mm]),
+    ]))
+    num = Paragraph(f"<b><font size=22>{int(round(s))}</font></b>"
+                    f"<font size=10 color='{MUTED}'>/100</font>", st["stamp"])
+    outer = Table([[num, bar]], colWidths=[30 * mm, (width_mm + 4) * mm])
+    outer.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    return outer
+
+
+def _bars_chart(pairs: list, width_mm: float = 168.0, height_mm: float = 42.0,
+                bar_color: str = SAFFRON, hi_color: str = EMERALD):
+    """Hand-drawn-feel vertical bars with value + month labels."""
+    from reportlab.graphics.shapes import Drawing, Line, Rect, String
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+
+    d = Drawing(width_mm * mm, height_mm * mm)
+    if not pairs:
+        return d
+    try:
+        vals = [max(float(v or 0), 0.0) for _, v in pairs]
+    except Exception:
+        return d
+    vmax = max(vals) if vals and max(vals) > 0 else 1.0
+    n = len(pairs)
+    slot = (width_mm * mm) / n
+    bw = min(slot * 0.52, 14 * mm)
+    base = 8 * mm
+    top = height_mm * mm - 4 * mm
+    hi = max(range(n), key=lambda i: vals[i])
+    for i, ((label, _v), v) in enumerate(zip(pairs, vals)):
+        h = max((top - base) * (v / vmax), 1.2 * mm)
+        x = i * slot + (slot - bw) / 2
+        d.add(Rect(x, base, bw, h, fillColor=colors.HexColor(
+            hi_color if i == hi else bar_color),
+            strokeColor=colors.HexColor(
+                SAFFRON_DARK if i != hi else EMERALD), strokeWidth=0.6))
+        try:
+            short = _inr(v) if v >= 1000 else str(int(round(v)))
+        except Exception:
+            short = ""
+        d.add(String(x + bw / 2, base + h + 1.2 * mm, short,
+                     fontSize=5.5, textAnchor="middle",
+                     fillColor=colors.HexColor(MUTED)))
+        d.add(String(x + bw / 2, 2.2 * mm, str(label or "")[:7],
+                     fontSize=5.5, textAnchor="middle",
+                     fillColor=colors.HexColor(MUTED)))
+    d.add(Line(0, base, width_mm * mm, base, strokeColor=colors.HexColor(LINE),
+               strokeWidth=0.7))
+    return d
+
+
+def _styled_table(header: list, rows: list, widths_mm: list, head_bg: str):
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    st = _styles()
+    data = [[Paragraph(f"<b>{h}</b>", st["cell"]) for h in header]]
+    for r in rows:
+        data.append([Paragraph(str(c or "—")[:64],
+                               st["cell"] if j < 2 else st["cellmut"])
+                     for j, c in enumerate(r)])
+    t = Table(data, colWidths=[w * mm for w in widths_mm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(head_bg)),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor(LINE)),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+         [colors.white, colors.HexColor("#FDF8F0")]),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    return t
+
+
+def _stamp_box(big: str, small: str, tone: str):
+    """Rotated-stamp feel: thick tone border box with big text."""
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    st = _styles()
+    inner = Table([
+        [Paragraph(f"<b>{big}</b>", st["stamp"])],
+        [Paragraph(small, st["sub"])],
+    ], colWidths=[60 * mm])
+    inner.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 1.6, colors.HexColor(tone)),
+        ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor(tone)),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("TOPPADDING", (0, 0), (-1, -1), 3 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3 * mm),
+    ]))
+    return inner
+
+
+def _page_footer(stamp: str):
+    def _footer(canvas, _doc):
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+
+        try:
+            canvas.saveState()
+            canvas.setStrokeColor(colors.HexColor(SAFFRON))
+            canvas.setLineWidth(1.2)
+            canvas.line(14 * mm, 12 * mm, 196 * mm, 12 * mm)
+            canvas.setFont("Helvetica", 7)
+            canvas.setFillColor(colors.HexColor(MUTED))
+            canvas.drawString(
+                14 * mm, 8.5 * mm,
+                f"AI suggests. Owner decides.  |  Generated by VyapaarAI  |  {stamp}")
+            canvas.drawRightString(
+                196 * mm, 8.5 * mm, "vyapaarai")
+            canvas.restoreState()
+        except Exception:
+            pass
+    return _footer
+
+
+def _doc(buf, title: str):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate
+
+    return SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=14 * mm, rightMargin=14 * mm,
+        topMargin=10 * mm, bottomMargin=16 * mm, title=title)
+
+
+def _identity(db, oid: int):
+    biz, owner_name, owner_phone, prof = "", "", "", None
     try:
         from app.models import OwnerProfile
 
         prof = db.query(OwnerProfile).filter(OwnerProfile.id == oid).first()
         biz = str(getattr(prof, "business_name", "") or "").strip()
+        owner_name = str(getattr(prof, "name", "") or "").strip()
+        owner_phone = str(getattr(prof, "phone", "") or "").strip()
     except Exception:
-        prof = None
+        pass
     if not biz:
         try:
             from app import config as _cfg
@@ -51,18 +412,53 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
             biz = str(getattr(_cfg, "BUSINESS_NAME", "") or "").strip()
         except Exception:
             biz = ""
-    biz = biz or "Sharma Kirana Traders"
+    return (biz or "Sharma Kirana Traders"), owner_name, owner_phone
 
-    # --- block 1: health ---
+
+def _daily_trend(db, oid: int, days: int = 14) -> list:
+    """Last-N-days revenue bars (dd/mm labels)."""
+    out = []
+    try:
+        from app.services import intelligence as eng
+
+        today = date.today()
+        for i in range(max(int(days or 14), 1) - 1, -1, -1):
+            d = today - timedelta(days=i)
+            try:
+                rev = float(eng.revenue_between(db, d, d, oid) or 0)
+            except Exception:
+                rev = 0.0
+            out.append((d.strftime("%d/%m"), round(rev, 2)))
+    except Exception:
+        pass
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Daily report
+# ---------------------------------------------------------------------------
+
+def build_daily_pdf(db, owner_id: int = 1) -> bytes:
+    """ONE-page A4 daily hisab. Returns PDF bytes (always, never raises)."""
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Paragraph, Spacer
+
+    from app.services import intelligence as eng
+
+    oid = _oid(owner_id)
+    today = date.today()
+    biz, owner_name, _phone = _identity(db, oid)
+    st = _styles()
+
     try:
         hs = eng.health_score(db, owner_id=oid)
         overall = int(hs.get("overall") or 0)
         grade = str(hs.get("grade") or "")
         subs = hs.get("subscores", []) or []
+        headline = str(hs.get("headline") or "")
     except Exception:
-        overall, grade, subs = 0, "", []
+        overall, grade, subs, headline = 0, "", [], ""
 
-    # --- block 2: revenue ---
     try:
         rev_today = eng.revenue_between(db, today, today, oid)
         w_end, w_start = today, today - timedelta(days=6)
@@ -71,9 +467,8 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
         rev_prev7 = eng.revenue_between(db, p_start, p_end, oid)
         pct = ((rev_7 - rev_prev7) / rev_prev7 * 100) if rev_prev7 > 0 else 0.0
     except Exception:
-        rev_today, rev_7, pct = 0.0, 0.0, 0.0
+        rev_today, rev_7, rev_prev7, pct = 0.0, 0.0, 0.0, 0.0
 
-    # --- block 3: low stock top 5 ---
     low_rows: list = []
     try:
         from app.models import InventoryItem, Product
@@ -91,11 +486,11 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
             try:
                 avg = eng._avg_daily_28(db, prod.id, today, oid)
                 sd = (float(inv.stock_qty or 0) / avg) if avg and avg > 0 else None
-                sd_txt = f"{sd:.0f}d" if sd is not None else "—"
+                sd_txt = f"{sd:.0f} din" if sd is not None else "—"
             except Exception:
                 sd_txt = "—"
             low_rows.append([
-                str(prod.name or "")[:28],
+                _tx(prod.name or "")[:28],
                 f"{float(inv.stock_qty or 0):.0f}",
                 f"{float(inv.reorder_level or 0):.0f}",
                 sd_txt,
@@ -103,7 +498,6 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
     except Exception:
         low_rows = []
 
-    # --- block 4: overdue ---
     od_rows: list = []
     od_total = 0.0
     try:
@@ -128,15 +522,14 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
             except Exception:
                 pass
             od_rows.append([
-                str((cust.name if cust else "") or "")[:20],
-                str(rec.invoice_no or ""),
+                _tx((cust.name if cust else "") or "")[:20],
+                _tx(rec.invoice_no or ""),
                 _inr(rec.amount),
-                f"{late}d",
+                f"{late}d late" if late > 30 else f"{late}d",
             ])
     except Exception:
         od_rows = []
 
-    # --- block 5: pending actions top 3 ---
     act_rows: list = []
     try:
         from app.models import Action
@@ -149,119 +542,100 @@ def build_daily_pdf(db, owner_id: int = 1) -> bytes:
             .all()
         )
         for a in acts:
-            act_rows.append([str(a.title or "")[:60]])
+            act_rows.append(_tx(a.title or "")[:70])
     except Exception:
         act_rows = []
 
-    # --- compose ---
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=14 * mm,
-        title=f"VyapaarAI Daily Report {today.isoformat()}",
-    )
-    styles = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=15, leading=18, spaceAfter=1)
-    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=10, leading=13,
-                        spaceBefore=6, spaceAfter=3, textColor=colors.HexColor("#065f46"))
-    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=7.5, leading=10)
-    cell = ParagraphStyle("cell", parent=styles["Normal"], fontSize=7.5, leading=10)
-    big = ParagraphStyle("big", parent=styles["Normal"], fontSize=26, leading=28)
+    trend = _daily_trend(db, oid, 14)
 
+    buf = io.BytesIO()
+    doc = _doc(buf, f"VyapaarAI Daily {today.isoformat()}")
     story = [
-        Paragraph(f"{biz} — VyapaarAI Daily Report", h1),
-        Paragraph(f"{today.strftime('%d %b %Y')} • one page, har subah", small),
-        Spacer(1, 2),
+        _top_rule(182),
+        Paragraph("VYAPAARAI - DAILY HISAB", st["kicker"]),
+        Paragraph(_tx(biz), st["title"]),
+        Paragraph(
+            _tx(f"{today.strftime('%d %b %Y')} - Malik: {owner_name or '-'}"
+                + (f" - {headline}" if headline else "")), st["sub"]),
+        Spacer(1, 2 * mm),
     ]
 
-    # health
-    story.append(Paragraph(f"Health: {overall}/100 ({grade})", h2))
-    story.append(Paragraph(f"<font size=26><b>{overall}</b></font>"
-                           f" &nbsp; <font color='#065f46'>{grade}</font>", big))
+    story.append(_section_head("Dukaan ki sehat", f"Grade: {grade or '—'}"))
+    story.append(_score_bar(overall))
     if subs:
-        data = [["Area", "Score", "Driver"]]
+        srows = []
         for s in subs[:4]:
             try:
                 sc = s.get("score", "")
-                data.append([str(s.get("name", "")), ("—" if sc is None else str(sc)),
-                             str(s.get("breakdown", ""))[:90]])
+                srows.append([_tx(s.get("name", "")),
+                              ("-" if sc is None else _tx(sc)),
+                              _tx(s.get("breakdown", ""))[:80]])
             except Exception:
                 continue
-        t = Table(data, colWidths=[28 * mm, 14 * mm, 138 * mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ecfdf5")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]))
-        story.append(t)
+        story.append(_styled_table(["Area", "Score", "Driver"], srows,
+                                   [34, 16, 118], EMERALD_SOFT))
 
-    # revenue
-    story.append(Paragraph(
-        f"Revenue: aaj {_inr(rev_today)} • last 7d {_inr(rev_7)} "
-        f"({pct:+.1f}% vs prev 7d)", h2))
+    story.append(_section_head("Paisa — 7 din ka khel",
+                               f"pichhle 7 din se {pct:+.1f}%"))
+    story.append(_kpi_strip([
+        ("Aaj ki bikri", _inr(rev_today), "", EMERALD),
+        ("7-din bikri", _inr(rev_7), f"{pct:+.1f}% vs pichhle 7",
+         EMERALD if pct >= 0 else ROSE),
+        ("Atka udhaar", _inr(od_total),
+         f"{len(od_rows)} bills" if od_rows else "sab vasool",
+         ROSE if od_total > 0 else EMERALD),
+        ("Low stock", str(len(low_rows)),
+         "turant lao" if low_rows else "sab thik", ROSE if low_rows else EMERALD),
+    ]))
+    if trend and any(v for _, v in trend):
+        story.append(_bars_chart(trend))
 
-    # low stock
-    story.append(Paragraph("Low stock (top 5)", h2))
+    story.append(_section_head("AI Salah", "aaj ke numbers par aadharit"))
+    facts = (
+        f"Health {overall}/100 ({grade}) | 7-din bikri {_inr(rev_7)} ({pct:+.1f}%) | "
+        f"Atka udhaar {_inr(od_total)} ({len(od_rows)} bills) | "
+        f"Low stock {len(low_rows)} items | Pending actions {len(act_rows)}"
+    )
+    for i, line in enumerate(_ai_advice(facts, "daily"), start=1):
+        story.append(Paragraph(f"<b>{i}.</b> {line}", st["cell"]))
+
+    story.append(_section_head("Khatm hone wala maal", "top 5 — ye pehle lao"))
     if low_rows:
-        t = Table([["SKU", "Stock", "Reorder", "Bachega"]] + low_rows,
-                  colWidths=[100 * mm, 26 * mm, 26 * mm, 28 * mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fef3c7")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-        ]))
-        story.append(t)
+        story.append(_styled_table(["Item", "Stock", "Level", "Bachega"],
+                                   low_rows, [86, 26, 26, 30], GOLD_SOFT))
     else:
-        story.append(Paragraph("Sabhi products mein paryaapt stock hai ✅", cell))
+        story.append(Paragraph("Sabhi products me paryaapt stock hai.", st["cell"]))
 
-    # overdue
-    story.append(Paragraph(f"Overdue udhaar — total {_inr(od_total)}", h2))
+    story.append(_section_head("Udhaar — paisa atka hai", f"total {_inr(od_total)}"))
     if od_rows:
-        t = Table([["Party", "Invoice", "Amount", "Late"]] + od_rows,
-                  colWidths=[70 * mm, 40 * mm, 36 * mm, 34 * mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fee2e2")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-        ]))
-        story.append(t)
+        story.append(_styled_table(["Party", "Bill", "Rakam", "Late"],
+                                   od_rows, [62, 40, 36, 30], ROSE_SOFT))
     else:
-        story.append(Paragraph("Koi overdue payment nahi ✅", cell))
+        story.append(Paragraph("Koi overdue payment nahi.", st["cell"]))
 
-    # actions
-    story.append(Paragraph("Aaj ke actions (top 3 pending)", h2))
+    story.append(_section_head("Kal ke 3 kaam", "malik approve karega"))
     if act_rows:
-        for i, (title,) in enumerate(act_rows, start=1):
-            story.append(Paragraph(f"{i}. {title}", cell))
+        for i, title in enumerate(act_rows, start=1):
+            story.append(Paragraph(
+                f"<font color='{SAFFRON_DARK}'>[ ]</font> <b>{i}.</b> {_tx(title)}",
+                st["cell"]))
     else:
-        story.append(Paragraph("Koi pending action nahi — Generate dabao ⚡", cell))
+        story.append(Paragraph("Koi pending action nahi — app me Generate dabao.",
+                               st["cell"]))
 
     stamp = datetime.now().strftime("%d-%b %H:%M")
-
-    def _footer(canvas, _doc):
-        try:
-            canvas.saveState()
-            canvas.setFont("Helvetica", 7)
-            canvas.setFillColor(colors.grey)
-            canvas.drawString(
-                14 * mm,
-                10 * mm,
-                f"AI suggests. Owner decides. • generated {stamp}",
-            )
-            canvas.restoreState()
-        except Exception:
-            pass
-
     try:
-        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+        doc.build(story, onFirstPage=_page_footer(stamp),
+                  onLaterPages=_page_footer(stamp))
     except Exception as exc:
         logger.warning("pdf build failed: %s", str(exc)[:200])
-        # minimal fallback — still a valid PDF
         buf = io.BytesIO()
-        doc2 = SimpleDocTemplate(buf, pagesize=A4)
-        doc2.build([Paragraph(f"{biz} daily report unavailable: {exc}"[:200],
-                              styles["Normal"])])
+        from reportlab.lib.styles import getSampleStyleSheet as _gss
+        from reportlab.platypus import SimpleDocTemplate as _SDT
+
+        _SDT(buf, title="VyapaarAI Daily").build(
+            [Paragraph(f"{biz} daily report unavailable",
+                       _gss()["Normal"])])
     return buf.getvalue()
 
 
@@ -306,42 +680,23 @@ def _monthly_trend(db, owner_id: int, months: int = 6) -> list:
     return [(k, round(buckets.get(k, 0.0), 2)) for k in order]
 
 
+# ---------------------------------------------------------------------------
+# Credit (bank-ready) report
+# ---------------------------------------------------------------------------
+
 def build_credit_pdf(db, owner_id: int = 1) -> bytes:
-    """P8-F1: bank-ready loan file. Score + grade + 4 subscores + reasons +
-    last-6-months trend + bank_summary + owner/business/phone header +
-    'Generated by VyapaarAI' footer. Returns PDF bytes (always, never raises)."""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    """Bank-ready loan file: stamp + subscores + reasons + 6-month chart +
+    bank summary. Returns PDF bytes (always, never raises)."""
     from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Paragraph, Spacer
 
     from app.services import credit as cred
 
     oid = _oid(owner_id)
     today = date.today()
+    biz, owner_name, owner_phone = _identity(db, oid)
+    st = _styles()
 
-    # --- header identity ---
-    biz, owner_name, owner_phone = "", "", ""
-    try:
-        from app.models import OwnerProfile
-
-        prof = db.query(OwnerProfile).filter(OwnerProfile.id == oid).first()
-        biz = str(getattr(prof, "business_name", "") or "").strip()
-        owner_name = str(getattr(prof, "name", "") or "").strip()
-        owner_phone = str(getattr(prof, "phone", "") or "").strip()
-    except Exception:
-        prof = None
-    if not biz:
-        try:
-            from app import config as _cfg
-
-            biz = str(getattr(_cfg, "BUSINESS_NAME", "") or "").strip()
-        except Exception:
-            biz = ""
-    biz = biz or "Sharma Kirana Traders"
-
-    # --- credit facts (single source: credit_score) ---
     try:
         cs = cred.credit_score(db, owner_id=oid)
     except Exception:
@@ -358,92 +713,73 @@ def build_credit_pdf(db, owner_id: int = 1) -> bytes:
     trend = _monthly_trend(db, oid, 6)
 
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=14 * mm,
-        title=f"VyapaarAI Credit Report {today.isoformat()}",
-    )
-    styles = getSampleStyleSheet()
-    h1 = ParagraphStyle("h1", parent=styles["Heading1"], fontSize=15, leading=18, spaceAfter=1)
-    h2 = ParagraphStyle("h2", parent=styles["Heading2"], fontSize=10, leading=13,
-                        spaceBefore=6, spaceAfter=3, textColor=colors.HexColor("#065f46"))
-    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=7.5, leading=10)
-    cell = ParagraphStyle("cell", parent=styles["Normal"], fontSize=7.5, leading=10)
-    big = ParagraphStyle("big", parent=styles["Normal"], fontSize=26, leading=28)
-
+    doc = _doc(buf, f"VyapaarAI Credit {today.isoformat()}")
+    tone = _tone(overall)
     story = [
-        Paragraph(f"{biz} — Loan-Ready Credit Report", h1),
+        _top_rule(182),
+        Paragraph("VYAPAARAI - BANK-READY CREDIT FILE", st["kicker"]),
+        Paragraph(_tx(biz), st["title"]),
         Paragraph(
-            f"Owner: {owner_name or '—'} • Phone: {owner_phone or '—'} • "
-            f"Date: {today.strftime('%d %b %Y')} • Score se seedha loan file.",
-            small),
-        Spacer(1, 2),
-        Paragraph(f"Credit Score: {overall}/100 ({grade})", h2),
-        Paragraph(f"<font size=26><b>{overall}</b></font>"
-                  f" &nbsp; <font color='#065f46'>{grade}</font>", big),
+            _tx(f"Malik: {owner_name or '-'} - Phone: {owner_phone or '-'} - "
+                f"Date: {today.strftime('%d %b %Y')}"), st["sub"]),
+        Spacer(1, 2 * mm),
+        _stamp_box(f"{overall}/100  •  {grade or '—'}",
+                   "Business Credit Score — bank isi ko dekhta hai", tone),
+        Spacer(1, 2 * mm),
     ]
 
+    story.append(_section_head("Score ke 4 hisse", "wazan ke saath"))
     if subs:
-        data = [["Subscore", "Weight", "Score", "Driver"]]
+        srows = []
         for s in subs[:4]:
             try:
-                data.append([str(s.get("name", "")), str(s.get("weight", "")),
-                             str(s.get("score", "")), str(s.get("breakdown", ""))[:80]])
+                srows.append([_tx(s.get("name", "")),
+                              _tx(s.get("weight", "")),
+                              _tx(s.get("score", "")),
+                              _tx(s.get("breakdown", ""))[:70]])
             except Exception:
                 continue
-        t = Table(data, colWidths=[52 * mm, 18 * mm, 18 * mm, 92 * mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ecfdf5")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]))
-        story.append(t)
+        story.append(_styled_table(["Hissa", "Wazan", "Score", "Driver"],
+                                   srows, [56, 20, 20, 72], EMERALD_SOFT))
+
+    story.append(_section_head("AI Salah", "bank-file ke liye best-model raay"))
+    cfacts = (
+        f"Score {overall}/100 ({grade}) | Ausat {_inr(monthly_avg)}/mahina ({months_data} mahine) | "
+        f"Overdue {_inr(overdue_total)} ({overdue_count} bills) | "
+        f"Reasons: {'; '.join([str(r)[:80] for r in reasons[:2]])}"
+    )
+    for i, line in enumerate(_ai_advice(cfacts, "credit"), start=1):
+        story.append(Paragraph(f"<b>{i}.</b> {line}", st["cell"]))
 
     if reasons:
-        story.append(Paragraph("Reasons (weakest first)", h2))
+        story.append(_section_head("Bank kya sochega", "sabse kamzor pehle"))
         for i, r in enumerate(reasons[:4], start=1):
-            story.append(Paragraph(f"{i}. {r}"[:220], cell))
+            story.append(Paragraph(f"<b>{i}.</b> {_tx(r)[:220]}", st["cell"]))
 
-    story.append(Paragraph("Last 6 months revenue trend", h2))
-    if trend:
-        tdata = [["Month", "Revenue"]]
-        for k, v in trend:
-            tdata.append([k, _inr(v)])
-        t = Table(tdata, colWidths=[60 * mm, 60 * mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#fef3c7")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-        ]))
-        story.append(t)
-        story.append(Paragraph(
-            f"{months_data} months of sales data • monthly avg {_inr(monthly_avg)} • "
-            f"overdue {_inr(overdue_total)} across {overdue_count} invoices", cell))
+    story.append(_section_head("6 mahine ki kamai", f"ausat {_inr(monthly_avg)}/mahina"))
+    if trend and any(v for _, v in trend):
+        story.append(_bars_chart(
+            [(k[5:], v) for k, v in trend], hi_color=EMERALD))
+    story.append(Paragraph(
+        f"{months_data} mahine ka data • overdue {_inr(overdue_total)} "
+        f"({overdue_count} bills)", st["sub"]))
 
     if bank_summary:
-        story.append(Paragraph("Bank summary", h2))
+        story.append(_section_head("Bank ke liye summary", "copy-paste ready"))
         for line in bank_summary.splitlines()[:8]:
-            story.append(Paragraph(line[:220] or " ", cell))
+            story.append(Paragraph(_tx(line.strip() or " ")[:220], st["quote"]))
 
     stamp = datetime.now().strftime("%d-%b %H:%M")
-
-    def _footer(canvas, _doc):
-        try:
-            canvas.saveState()
-            canvas.setFont("Helvetica", 7)
-            canvas.setFillColor(colors.grey)
-            canvas.drawString(14 * mm, 10 * mm, f"Generated by VyapaarAI • {stamp}")
-            canvas.restoreState()
-        except Exception:
-            pass
-
     try:
-        doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+        doc.build(story, onFirstPage=_page_footer(stamp),
+                  onLaterPages=_page_footer(stamp))
     except Exception as exc:
         logger.warning("credit pdf build failed: %s", str(exc)[:200])
         buf = io.BytesIO()
-        doc2 = SimpleDocTemplate(buf, pagesize=A4)
-        doc2.build([Paragraph(f"{biz} credit report unavailable: {exc}"[:200],
-                              styles["Normal"])])
+        from reportlab.lib.styles import getSampleStyleSheet as _gss
+        from reportlab.platypus import SimpleDocTemplate as _SDT
+
+        _SDT(buf, title="VyapaarAI Credit").build(
+            [Paragraph(f"{biz} credit report unavailable",
+                       _gss()["Normal"])])
     return buf.getvalue()

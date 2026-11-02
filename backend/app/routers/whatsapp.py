@@ -1,4 +1,5 @@
 import hmac
+import json
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -23,23 +24,44 @@ def _webhook_secret() -> str:
     return raw.strip()
 
 
-def _verify_webhook(request: Request) -> bool:
-    """S8#16: WEBHOOK_SECRET set ho to 'x-webhook-secret' header se verify karo.
+def _verify_webhook(request: Request, body: bytes) -> bool:
+    """S8#16: WEBHOOK_SECRET set ho to webhook verify karo.
 
-    OpenWA webhook config me secret bheja jaata hai (wa_gateway.set_webhook);
-    OpenWA har POST me 'x-webhook-secret: <secret>' header bhejta hai.
+    OpenWA webhook config me secret bheja jaata hai (wa_gateway.set_webhook).
+    OpenWA delivery ke time par body par HMAC-SHA256 (hex) bana kar
+    'X-OpenWA-Signature' header me bhejta hai — raw secret kabhi nahi bhejta.
+    Isliye direct 'x-webhook-secret' compare fail ho raha tha (401) aur koi
+    message handler tak nahi pahunchta, isliye koi reply nahi milta.
+
     Secret set nahi hai to verification skip (dev). Mismatch/missing -> False.
     """
     secret = _webhook_secret()
     if not secret:
         return True
     try:
-        got = request.headers.get("x-webhook-secret", "") or ""
+        got = (
+            (request.headers.get("x-webhook-secret", "") or "")
+            or (request.headers.get("x-openwa-secret", "") or "")
+        )
+        if not got:
+            auth = request.headers.get("authorization", "") or ""
+            if auth.startswith("Bearer "):
+                got = auth[len("Bearer "):].strip()
     except Exception:
         got = ""
-    if not got:
+    if got:
+        return hmac.compare_digest(str(got), str(secret))
+    # OpenWA: HMAC-SHA256(body, secret) hex
+    try:
+        sig = request.headers.get("x-openwa-signature", "") or ""
+        if not sig:
+            return False
+        import hashlib
+
+        expected = hmac.new(str(secret).encode("utf-8"), body or b"", hashlib.sha256).hexdigest()
+        return hmac.compare_digest(str(sig), expected)
+    except Exception:
         return False
-    return hmac.compare_digest(str(got), str(secret))
 
 
 @router.get("/webhook/whatsapp")
@@ -49,14 +71,18 @@ def whatsapp_ping():
 
 @router.post("/webhook/whatsapp")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
-    if not _verify_webhook(request):
+    try:
+        body = await request.body()
+    except Exception:
+        body = b""
+    if not _verify_webhook(request, body):
         logger.warning("webhook rejected: missing/invalid x-webhook-secret")
         return JSONResponse(
             status_code=401,
             content={"error": "unauthorized", "request_id": getattr(request.state, "request_id", "")},
         )
     try:
-        payload = await request.json()
+        payload = json.loads(body or b"{}") if body else {}
     except Exception:
         payload = {}
     try:

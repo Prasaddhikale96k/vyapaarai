@@ -30,9 +30,54 @@ POLL_SECONDS = int(os.getenv("POLL_SECONDS", "30"))
 
 def _token() -> str:
     try:
+        direct = os.getenv("AGENT_TOKEN", "").strip()
+        if direct:
+            return direct
         return TOKEN_FILE.read_text(encoding="utf-8").strip()
     except Exception:
         return ""
+
+
+def _save_token(tok: str) -> None:
+    try:
+        TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        TOKEN_FILE.write_text(tok.strip(), encoding="utf-8")
+    except Exception as exc:
+        logger.warning("token save nahi hua: %s", str(exc)[:120])
+
+
+def _pair_with_code() -> str:
+    """Pehli baar: web se 6-char code lo, yahan dalo — token khud save hoga."""
+    try:
+        print("")
+        print("VyapaarAI pairing — token copy karne ki zaroorat nahi.")
+        print("  1. Web kholo: /app/data -> 'Computer se jodo' -> code dikhega")
+        print("  2. Wo 6-char code yahan dalo:")
+        code = input("  Code: ").strip().upper()
+        if not code:
+            return ""
+        r = requests.post(f"{BACKEND_URL}/connectors/agent-token",
+                          json={"code": code}, timeout=20)
+        try:
+            data = r.json()
+        except Exception:
+            data = {}
+        if isinstance(data, dict) and data.get("ok") and data.get("token"):
+            _save_token(str(data["token"]))
+            print("  Paired! Ab se auto-sync chalega.")
+            return str(data["token"])
+        print(f"  Pair fail: {(data or {}).get('error', r.text[:120])}")
+        return ""
+    except Exception as exc:
+        logger.warning("pair fail: %s", str(exc)[:150])
+        return ""
+
+
+def _ensure_token() -> str:
+    tok = _token()
+    if tok:
+        return tok
+    return _pair_with_code()
 
 
 def _post_ingest(rows: list) -> dict:
@@ -98,6 +143,9 @@ class ExcelHandler(FileSystemEventHandler):
 
 def main():
     WATCH_DIR.mkdir(parents=True, exist_ok=True)
+    if not _ensure_token():
+        logger.warning("excel_sync: bina pairing ke band — dobara chalao aur code dalo")
+        return
     observer = Observer()
     observer.schedule(ExcelHandler(), str(WATCH_DIR), recursive=False)
     observer.start()

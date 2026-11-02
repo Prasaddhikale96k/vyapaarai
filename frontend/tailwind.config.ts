@@ -6,6 +6,16 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        brand: {
+          DEFAULT: "#E8771A",
+          light: "#FFF3E0",
+          dark: "#B85A00",
+        },
+        success: {
+          DEFAULT: "#059669",
+          light: "#D9F2E7",
+          dark: "#0D7A55",
+        },
         saffron: {
           DEFAULT: "#E8771A",
           light: "#FFF3E0",

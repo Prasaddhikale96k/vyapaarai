@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 *.db
 *.db-journal
 node_modules/
@@ -9,4 +11,11 @@ venv/
 watch/*
 !watch/.gitkeep
 *.log
+*.err
+*.tsbuildinfo
+.ruff_cache/
+.agents/
+skills-lock.json
+backend/connectors/token.txt
+backend/connectors/tally_state.json
 .DS_Store

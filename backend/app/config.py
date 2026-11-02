@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     llm_primary_provider: str = "groq"
     llm_fallback_provider: str = "gemini"
     demo_mode_fallback: bool = True
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     gemini_model: str = "gemini-2.5-flash"
     evolution_api_url: str = "http://localhost:8080"
     evolution_api_key: str = "vyapaar123"
@@ -58,7 +60,9 @@ if _demo_raw is None:
     DEMO_MODE_FALLBACK = bool(settings.demo_mode_fallback)
 else:
     DEMO_MODE_FALLBACK = _demo_raw.strip().lower() in ("1", "true", "yes", "y", "on")
-GROQ_MODEL = os.getenv("GROQ_MODEL", settings.groq_model or "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", settings.groq_model or "openai/gpt-oss-120b")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", settings.openrouter_api_key or "")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", settings.openrouter_model or "nvidia/nemotron-3-super-120b-a12b:free")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", settings.gemini_model or "gemini-2.5-flash")
 BUSINESS_NAME = os.getenv("BUSINESS_NAME", settings.business_name or "Sharma Kirana Traders")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", settings.whisper_model or "medium")

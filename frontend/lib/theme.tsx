@@ -8,28 +8,21 @@ const KEY = "vyapaarai-theme";
 const Ctx = createContext<{ theme: Theme; toggle: () => void }>({ theme: "light", toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  // Cream-light ONLY theme (dark removed): hamesha light, purani saved dark bhi light.
+  const [theme] = useState<Theme>("light");
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(KEY);
-      if (saved === "light" || saved === "dark") setTheme(saved);
+      document.documentElement.dataset.theme = "light";
+      document.documentElement.style.colorScheme = "light";
+      document.documentElement.classList.remove("dark");
+      window.localStorage.setItem(KEY, "light");
     } catch {
       /* ignore */
     }
   }, []);
 
-  useEffect(() => {
-    try {
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.style.colorScheme = theme;
-      window.localStorage.setItem(KEY, theme);
-    } catch {
-      /* ignore */
-    }
-  }, [theme]);
-
-  const toggle = useCallback(() => setTheme((t) => (t === "light" ? "dark" : "light")), []);
+  const toggle = useCallback(() => {}, []);
   return <Ctx.Provider value={{ theme, toggle }}>{children}</Ctx.Provider>;
 }
 

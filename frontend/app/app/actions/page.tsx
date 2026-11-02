@@ -24,19 +24,144 @@ const typeTone: Record<string, "rose" | "sky" | "violet" | "zinc"> = {
   payment_reminder: "rose",
   reorder: "sky",
   discount_offer: "violet",
+  supplier_order: "sky",
+  scheme_alert: "violet",
 };
+
+interface SupplierContact {
+  id: number;
+  kind: string;
+  name: string;
+  phone: string;
+}
+
+interface ApproveResp {
+  status: string;
+  delivery?: { simulated?: boolean; error?: string };
+  needs_supplier?: boolean;
+  order_message?: string | null;
+  target_phone?: string | null;
+  target_name?: string | null;
+}
+
+function SupplierPicker({
+  actionId,
+  suppliers,
+  orderMessage,
+  onSent,
+}: {
+  actionId: number;
+  suppliers: SupplierContact[];
+  orderMessage: string | null;
+  onSent: () => void;
+}) {
+  const [selId, setSelId] = useState<string>("");
+  const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const send = async () => {
+    let payload: Record<string, unknown>;
+    if (selId) {
+      payload = { contact_id: Number(selId) };
+    } else {
+      if (phone.replace(/\D/g, "").length < 10) {
+        toast.error("Supplier select karo ya sahi 10-digit phone likho");
+        return;
+      }
+      payload = { phone: phone.trim(), name: name.trim() };
+    }
+    setSending(true);
+    try {
+      const r = await apiFetch<ApproveResp>(`/actions/${actionId}/send-to-supplier`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (r.delivery?.simulated) {
+        toast.warning("Supplier save ho gaya — WhatsApp gateway down hai (simulated)");
+      } else {
+        toast.success(`Supplier ko WhatsApp bhej diya ✅ (${r.target_phone ?? ""})`);
+      }
+      if (r.order_message) {
+        toast.info(r.order_message.slice(0, 120));
+      }
+      onSent();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Supplier ko bhej nahi paye");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2 rounded-xl border border-dashed border-zinc-700 p-3">
+      <p className="text-xs font-bold text-zinc-200">📲 Supplier select karo — order WhatsApp pe jayega</p>
+      {orderMessage && (
+        <p className="rounded-lg bg-zinc-900 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-zinc-300">
+          {orderMessage}
+        </p>
+      )}
+      {suppliers.length > 0 ? (
+        <select
+          className="w-full rounded-xl border border-zinc-700 bg-transparent px-3 py-2 text-sm text-zinc-100 outline-none"
+          value={selId}
+          onChange={(e) => setSelId(e.target.value)}
+          aria-label="Supplier contact chuno"
+        >
+          <option value="">— Contacts se supplier chuno —</option>
+          {suppliers.map((s) => (
+            <option key={s.id} value={String(s.id)}>
+              {s.name} • {s.phone}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <p className="text-[11px] text-zinc-500">
+          Contacts me koi supplier nahi — neeche phone likho (ya /app/contacts me jodo).
+        </p>
+      )}
+      <div className="flex gap-2">
+        <input
+          className="w-full rounded-xl border border-zinc-700 bg-transparent px-3 py-2 text-sm text-zinc-100 outline-none placeholder:opacity-40"
+          placeholder="Ya supplier phone (10 digits)"
+          inputMode="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+        <input
+          className="w-full rounded-xl border border-zinc-700 bg-transparent px-3 py-2 text-sm text-zinc-100 outline-none placeholder:opacity-40"
+          placeholder="Naam (optional)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <Button onClick={send} disabled={sending} className="w-full">
+        {sending ? "Bhej rahe…" : "Supplier ko WhatsApp karo 📲"}
+      </Button>
+      <p className="text-[11px] text-zinc-500">
+        Supplier reply karega (CONFIRM + qty) to order yahin Actions me supplier_order ban ke aayega ✅
+      </p>
+    </div>
+  );
+}
 
 function ActionCard({
   a,
   i,
+  suppliers,
   onDone,
 }: {
   a: ActionItem;
   i: number;
+  suppliers: SupplierContact[];
   onDone: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const actionable = a.status === "pending";
+  const isReorder = a.type === "reorder";
+  const needsPickerNow = isReorder && (a.status === "approved" || a.status === "sent");
+  const [showPicker, setShowPicker] = useState(false);
+  const [orderMsg, setOrderMsg] = useState<string | null>(null);
   const upiLink = (() => {
     try {
       const m = String(a.draft_message ?? "").match(/upi:\/\/[^\s"']+/);
@@ -51,7 +176,7 @@ function ActionCard({
   const act = async (kind: "approve" | "reject") => {
     setBusy(true);
     try {
-      const res = await apiFetch<{ status: string; delivery?: { simulated?: boolean } }>(
+      const res = await apiFetch<ApproveResp>(
         `/actions/${a.id}/${kind}`,
         { method: "POST" }
       );
@@ -62,11 +187,17 @@ function ActionCard({
           /* ignore */
         }
         setSlammed("APPROVED");
-        toast.success(
-          res.delivery?.simulated
-            ? "Approved — delivery simulated (WhatsApp connect karo)"
-            : "Approved & sent on WhatsApp ✅"
-        );
+        if (res.order_message) setOrderMsg(res.order_message);
+        if (isReorder && (res.needs_supplier || res.status === "approved")) {
+          setShowPicker(true);
+          toast.success("Approved ✅ — ab supplier select karo 👇");
+        } else {
+          toast.success(
+            res.delivery?.simulated
+              ? "Approved — delivery simulated (WhatsApp connect karo)"
+              : "Approved & sent on WhatsApp ✅"
+          );
+        }
       } else {
         setSlammed("REJECTED");
         toast.success("Rejected");
@@ -155,6 +286,14 @@ function ActionCard({
           </motion.div>
         </div>
       )}
+      {(showPicker || (needsPickerNow && !slammed)) && isReorder && (
+        <SupplierPicker
+          actionId={a.id}
+          suppliers={suppliers}
+          orderMessage={orderMsg ?? a.draft_message}
+          onSent={onDone}
+        />
+      )}
     </Card>
   );
 }
@@ -163,8 +302,13 @@ export default function ActionsPage() {
   const [tab, setTab] = useState("pending");
   const [generating, setGenerating] = useState(false);
   const { data, loading, error, refetch } = useApi<ActionItem[]>(`/actions?status=${tab}`, 300000);
+  const { data: contacts } = useApi<SupplierContact[]>(`/contacts`, 300000);
 
   useRealtime(["actions"], () => refetch());
+
+  const suppliers: SupplierContact[] = Array.isArray(contacts)
+    ? contacts.filter((c) => c.kind === "supplier" || c.kind === "distributor")
+    : [];
 
   const generate = async () => {
     setGenerating(true);
@@ -220,7 +364,7 @@ export default function ActionsPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.map((a, i) => (
-            <ActionCard key={a.id} a={a} i={i} onDone={onDone} />
+            <ActionCard key={a.id} a={a} i={i} suppliers={suppliers} onDone={onDone} />
           ))}
         </div>
       )}

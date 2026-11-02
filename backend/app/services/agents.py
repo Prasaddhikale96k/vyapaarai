@@ -546,7 +546,7 @@ def orchestrate(question: str, phone: str = "web", owner_id: int = 1,
         try:
             res = llm_mod.chat_with_tools(
                 system=sys_prompt, user=q,
-                tools_schema=tools_schema, executor=bound_executor, max_iterations=5,
+                tools_schema=tools_schema, executor=bound_executor, max_iterations=3,
             )
             text = res.get("text", "")
             trace = res.get("tool_trace", []) or []

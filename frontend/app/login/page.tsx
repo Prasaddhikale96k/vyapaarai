@@ -84,7 +84,7 @@ export default function LoginPage() {
       {/* left: animated illustration */}
       <div
         className="relative hidden items-center justify-center overflow-hidden p-10 md:flex"
-        style={{ background: "linear-gradient(150deg, var(--accent-soft), var(--paper) 70%)" }}
+        style={{ background: "linear-gradient(150deg, var(--brand-soft, #fff3e0), var(--paper) 70%)" }}
       >
         <div className="max-w-sm text-center">
           <motion.div
@@ -92,7 +92,7 @@ export default function LoginPage() {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.7 }}
             className="font-display mx-auto flex h-24 w-24 items-center justify-center rounded-3xl text-5xl font-bold text-white"
-            style={{ background: "linear-gradient(135deg, var(--accent), #0d7a55)", boxShadow: "var(--shadow)" }}
+            style={{ background: "linear-gradient(135deg, var(--brand, #e8771a), var(--brand-dark, #b85a00))", boxShadow: "var(--shadow)" }}
           >
             व्या
           </motion.div>
@@ -102,7 +102,7 @@ export default function LoginPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
           >
-            Data se <span style={{ color: "var(--accent)" }}>Decision</span> tak.
+            Data se <span style={{ color: "var(--brand, #e8771a)" }}>Decision</span> tak.
           </motion.h1>
           <motion.p className="card-sub mt-3 text-sm" initial={reduce ? {} : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
             WhatsApp pe OTP aayega — dukaan ka copilot taiyaar.
@@ -110,7 +110,7 @@ export default function LoginPage() {
           <motion.svg viewBox="0 0 300 90" className="mx-auto mt-6 w-64" fill="none">
             <motion.path
               d="M5 75 C 60 70, 120 40, 180 45 S 270 25, 295 12"
-              stroke="var(--accent)"
+              stroke="var(--brand, #e8771a)"
               strokeWidth="3"
               strokeLinecap="round"
               initial={{ pathLength: 0 }}

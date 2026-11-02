@@ -223,21 +223,57 @@ export function logoutToLogin() {
 
 export async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   let res: Response;
+  // Token request ke waqt padho taaki 401-handler bata sake: session mari ya request hi bina-token thi.
+  let hadToken = false;
   try {
     const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> | undefined) };
     const tok = getToken();
+    hadToken = !!tok;
     if (tok && !headers["Authorization"] && !headers["authorization"]) {
       headers["Authorization"] = `Bearer ${tok}`;
     }
     if (opts?.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
       headers["Content-Type"] = "application/json";
     }
-    res = await fetch(`${API_URL}${path}`, { ...opts, headers });
+    // Purana cached 401 jawab dobara na mile — har request fresh (auto-logout loop ka ek reason yehi tha).
+    res = await fetch(`${API_URL}${path}`, { ...opts, headers, cache: "no-store" });
   } catch {
     throw new Error("Backend se connect nahi ho paya — kya uvicorn chal raha hai?");
   }
   if (res.status === 401 && !path.startsWith("/auth/")) {
-    logoutToLogin();
+    if (hadToken) {
+      // Check if JWT token is actually expired by checking payload before wiping session
+      let isActuallyExpiredOrInvalid = false;
+      try {
+        const tok = getToken();
+        if (tok) {
+          const parts = tok.split(".");
+          if (parts.length === 3) {
+            const payload = JSON.parse(atob(parts[1]));
+            if (payload.exp && Date.now() / 1000 > payload.exp) {
+              isActuallyExpiredOrInvalid = true;
+            }
+          } else {
+            isActuallyExpiredOrInvalid = true;
+          }
+        } else {
+          isActuallyExpiredOrInvalid = true;
+        }
+      } catch {
+        isActuallyExpiredOrInvalid = true;
+      }
+
+      if (isActuallyExpiredOrInvalid) {
+        logoutToLogin();
+      } else {
+        // Stray transient 401 on polling or route race — don't wipe active token immediately
+        console.warn(`Transient 401 on ${path} — token still valid locally, skipping auto-logout`);
+      }
+    } else if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      // Bina token wali stray request — sirf login pe bhejo,
+      // token wipe MAT karo taaki logged-in session bacha rahe.
+      window.location.href = "/login";
+    }
     throw new Error("Login chahiye — /login pe OTP lo");
   }
   if (!res.ok) {

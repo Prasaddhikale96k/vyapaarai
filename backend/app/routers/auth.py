@@ -126,10 +126,12 @@ def _decode_token(token: str) -> dict:
     if not secret:
         raise HTTPException(status_code=500, detail="Server JWT not configured")
     try:
-        return jwt.decode(token, secret, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError:
+        return jwt.decode(token, secret, algorithms=["HS256"], leeway=30)
+    except jwt.ExpiredSignatureError as exc:
+        logger.warning("auth failure: token expired: %s", exc)
         raise HTTPException(status_code=401, detail="Token expire ho gaya — dobara login karein")
-    except Exception:
+    except Exception as exc:
+        logger.warning("auth failure: token decode error (%s): %s", type(exc).__name__, exc)
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
@@ -138,21 +140,29 @@ def get_current_owner(
     db: Session = Depends(get_db),
 ):
     if creds is None or not (creds.credentials or "").strip():
+        logger.warning("auth failure: missing or empty bearer credentials")
         raise HTTPException(status_code=401, detail="Login chahiye — /login pe OTP lo")
     payload = _decode_token(creds.credentials.strip())
     try:
         oid = int(payload.get("sub") or 0)
-    except Exception:
+    except Exception as exc:
+        logger.warning("auth failure: invalid sub in payload: %s", exc)
         raise HTTPException(status_code=401, detail="Invalid token")
     try:
         from app.models import OwnerProfile
 
         prof = db.query(OwnerProfile).filter(OwnerProfile.id == oid).first()
-    except Exception:
+    except Exception as exc:
+        logger.error("auth failure: db query error for owner %s: %s", oid, exc)
         prof = None
-    if prof is None or not bool(getattr(prof, "allowed", False)):
+    if prof is None:
+        logger.warning("auth failure: profile not found for owner_id %s", oid)
+        raise HTTPException(status_code=401, detail="Account active nahi hai")
+    if not bool(getattr(prof, "allowed", False)):
+        logger.warning("auth failure: profile %s is not allowed (allowed=False)", oid)
         raise HTTPException(status_code=401, detail="Account active nahi hai")
     if bool(getattr(prof, "blocked", False)):
+        logger.warning("auth failure: profile %s is blocked", oid)
         raise HTTPException(status_code=401, detail="Account suspended hai — ops se sampark karo")
     return prof
 

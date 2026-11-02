@@ -49,6 +49,57 @@ def _oid(owner_id) -> int:
         return 1
 
 
+def build_supplier_order_text(a, business_name: str = "") -> str:
+    """Reorder action -> supplier WhatsApp PURCHASE ORDER (Hinglish).
+
+    Direction hamesha ek: HUM (MSME dukaan) maal MAANG rahe hain, SUPPLIER
+    bhejega. Kabhi paise maangne wali line ya UPI link isme nahi aata —
+    wo sirf customer payment_reminder me hota hai. Never raises.
+    """
+    try:
+        biz = str(business_name or "").strip() or _business_name()
+    except Exception:
+        biz = "Dukaan"
+    try:
+        pname = str(getattr(a, "target_name", "") or "Product").strip() or "Product"
+    except Exception:
+        pname = "Product"
+    # target_name reorder me PRODUCT hota hai (kabhi supplier nahi) —
+    # supplier ka naam sirf meta.supplier_name me rehta hai (approve picker se).
+    try:
+        supplier = ""
+        meta = a.get_meta() if hasattr(a, "get_meta") else {}
+        if isinstance(meta, dict):
+            supplier = str(meta.get("supplier_name", "") or "").strip()
+    except Exception:
+        supplier = ""
+    qty = ""
+    try:
+        meta = a.get_meta() if hasattr(a, "get_meta") else {}
+        if isinstance(meta, dict):
+            sq = meta.get("suggested_qty")
+            if sq is not None:
+                qty = str(int(float(sq)))
+    except Exception:
+        qty = ""
+    greet = f"Namaste{f' {supplier}' if supplier else ''} ji"
+    lines = [
+        f"{greet} 🙏",
+        f"{biz} se MAAL KA ORDER hai:",
+        f"- {pname}" + (f" — {qty} pcs KRIPYA BHEJ DIJIYE" if qty else " — KRIPYA BHEJ DIJIYE"),
+        "Stock khatm hone wala hai, jaldi bhejna 🙏",
+        "Maal pahunchne par hisab clear kar denge.",
+        "Pahunchte hi bata dena — dhanyavaad!",
+    ]
+    base = "\n".join(lines).strip()
+    try:
+        from app.routers.contacts import sign_message as _sign
+
+        return _sign(base, biz)
+    except Exception:
+        return base + f" — {biz} (via VyapaarAI)"
+
+
 def _existing_markers(db, action_type: str, owner_id: int = 1) -> list:
     from app.models import Action
 
@@ -209,21 +260,17 @@ def generate_recommendations(db, owner_id: int = 1) -> List[dict]:
                 suggested_qty = max(int(rol * 2 - stock), 7)
             if suggested_qty < 1:
                 suggested_qty = 1
-            draft = (
-                f"Internal: reorder {prod.name} ({sku}) — stock {stock:.0f} at/below "
-                f"reorder {rol:.0f} (~{avg_daily:.1f}/day). Suggested qty {suggested_qty}."
-            )
             title = f"Reorder {prod.name} ({sku})"[:128]
             detail = f"{marker} stock {stock:.0f} reorder {rol:.0f} suggested {suggested_qty}"
             a = Action(
                 type="reorder",
                 owner_id=oid,
-                title=title,
+                title=title[:128],
                 detail=detail,
                 target_name=prod.name,
                 target_phone=prod.supplier_phone,
                 amount=None,
-                draft_message=draft,
+                draft_message="",
                 status="pending",
                 meta=json.dumps(
                     {"severity": "high", "marker": marker, "suggested_qty": suggested_qty,
@@ -231,6 +278,20 @@ def generate_recommendations(db, owner_id: int = 1) -> List[dict]:
                 ),
             )
             db.add(a)
+            # Preview == sent: draft wahi order text jo supplier ko jayega
+            # (pehle "Internal:..." dikhta tha, supplier ko kuch aur jata tha).
+            try:
+                db.flush()
+                a.draft_message = build_supplier_order_text(a, _bizname)
+            except Exception:
+                try:
+                    a.draft_message = (
+                        f"Internal: reorder {prod.name} ({sku}) — stock {stock:.0f} "
+                        f"at/below reorder {rol:.0f} (~{avg_daily:.1f}/day). "
+                        f"Suggested qty {suggested_qty}."
+                    )
+                except Exception:
+                    pass
             existing_reorder.append(detail)
             created.append(a)
         except Exception as exc:

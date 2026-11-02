@@ -1,13 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBanner, FadeIn } from "@/components/fade-in";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import {
   API_URL,
@@ -142,7 +143,7 @@ function DropLabel({
       className="cursor-pointer rounded-xl px-4 py-2 text-sm font-semibold"
       style={
         primary
-          ? { background: "linear-gradient(135deg, var(--accent), #0d7a55)", color: "#fff" }
+          ? { background: "linear-gradient(135deg, var(--brand, #e8771a), var(--brand-dark, #b85a00))", color: "#fff" }
           : {
               border: `2px dashed ${over ? "var(--accent)" : "var(--card-border)"}`,
               color: "var(--ink)",
@@ -540,6 +541,8 @@ interface Connector {
   status: string;
   last_sync_at: string | null;
   rows_synced: number;
+  has_key?: boolean;
+  key_hint?: string | null;
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -549,18 +552,71 @@ const STATUS_TONE: Record<string, string> = {
   error: "var(--rose, #f43f5e)",
 };
 
+type HubKind = "cloud" | "agent" | "api";
+
+interface HubEntry {
+  type: string;
+  icon: string;
+  title: string;
+  desc: string;
+  kind: HubKind;
+}
+
+const HUB_CATALOG: HubEntry[] = [
+  { type: "google_sheets", icon: "📊", title: "Google Sheets", desc: "Link paste karo — har 60s auto-sync", kind: "cloud" },
+  { type: "excel_agent", icon: "📗", title: "Excel", desc: "Dukaan ke computer se auto-sync", kind: "agent" },
+  { type: "tally_agent", icon: "🧾", title: "Tally Prime", desc: "Day Book vouchers auto-sync", kind: "agent" },
+  { type: "busy_agent", icon: "📒", title: "Busy", desc: "Busy se sale auto-sync (agent)", kind: "agent" },
+  { type: "marg_agent", icon: "📕", title: "Marg", desc: "Marg se sale auto-sync (agent)", kind: "agent" },
+  { type: "zapier", icon: "⚡", title: "Zapier / Make", desc: "5000+ apps — bina code jodo", kind: "api" },
+  { type: "shopify", icon: "🛍️", title: "Shopify", desc: "Online orders auto-sync", kind: "api" },
+  { type: "woocommerce", icon: "🛒", title: "WooCommerce", desc: "Orders auto-sync", kind: "api" },
+  { type: "custom_api", icon: "🔌", title: "Custom API", desc: "Apna software khud jodo", kind: "api" },
+];
+
+const AGENT_CMD: Record<string, { file: string; title: string; note: string }> = {
+  excel_agent: { file: "excel_sync.py", title: "Excel local agent", note: "Watch folder → auto-ingest" },
+  tally_agent: { file: "tally_sync.py", title: "Tally local agent", note: "localhost:9000 Day Book → auto-ingest" },
+  busy_agent: { file: "excel_sync.py", title: "Busy local agent", note: "Busy export folder → auto-ingest" },
+  marg_agent: { file: "excel_sync.py", title: "Marg local agent", note: "Marg export folder → auto-ingest" },
+};
+
 function ConnectorsCard({ meId }: { meId: number | undefined }) {
   const connectors = useApi<Connector[]>("/connectors", 300000);
-  const [tab, setTab] = useState<"google_sheets" | "excel_agent" | "tally_agent">("google_sheets");
+  const [openType, setOpenType] = useState<string | null>(null);
   const [sheetLink, setSheetLink] = useState("");
+  const [shopDomain, setShopDomain] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [freshKey, setFreshKey] = useState<{ id: number; key: string } | null>(null);
 
   useRealtime(["connectors", "ingestion_logs"], () => connectors.refetch());
+
+  void meId;
 
   const extractSheetId = (link: string): string => {
     const m = link.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     return m ? m[1] : link.trim();
+  };
+
+  const createType = async (type: string, config: Record<string, unknown>) => {
+    setBusy(true);
+    try {
+      const r = await apiFetch<{ ok: boolean; connector?: Connector; api_key?: string; error?: string }>(
+        "/connectors",
+        { method: "POST", body: JSON.stringify({ type, config }) }
+      );
+      if (!r.ok) {
+        toast.error(r.error ?? "Connect nahi hua");
+        return;
+      }
+      if (r.api_key && r.connector) setFreshKey({ id: r.connector.id, key: r.api_key });
+      toast.success(`${type} connected ✅`);
+      connectors.refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Connect nahi hua");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const connectSheets = async () => {
@@ -569,20 +625,26 @@ function ConnectorsCard({ meId }: { meId: number | undefined }) {
       toast.error("Sahi Google Sheets link daalo");
       return;
     }
-    setBusy(true);
-    setMsg("");
+    await createType("google_sheets", { sheet_id: id, range: "A1:Z1000" });
+    setSheetLink("");
+  };
+
+  const connectShop = async (type: string) => {
+    const domain = shopDomain.trim();
+    if (!domain) {
+      toast.error("Dukaan ka domain likho (jaise myshop.myshopify.com)");
+      return;
+    }
+    await createType(type, { domain });
+    setShopDomain("");
+  };
+
+  const copyText = async (text: string, okMsg: string) => {
     try {
-      await apiFetch("/connectors", {
-        method: "POST",
-        body: JSON.stringify({ type: "google_sheets", config: { sheet_id: id, range: "A1:Z1000" } }),
-      });
-      toast.success("Sheets connector live ✅");
-      setSheetLink("");
-      connectors.refetch();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Connect nahi hua");
-    } finally {
-      setBusy(false);
+      await navigator.clipboard.writeText(text);
+      toast.success(okMsg);
+    } catch {
+      toast.error("Copy nahi ho paya — haath se likh lo");
     }
   };
 
@@ -617,73 +679,208 @@ function ConnectorsCard({ meId }: { meId: number | undefined }) {
 
   return (
     <Card delay={0.08} hover>
-      <h3 className="card-title">🔌 Live Connectors</h3>
-      <p className="card-sub mb-3">Google Sheets auto-sync • Excel/Tally local agent se</p>
+      <h3 className="card-title">🔌 Connect — sab apps ek jagah</h3>
+      <p className="card-sub mb-3">Sheets • Excel • Tally • Busy • Marg • Zapier • Shopify • Custom API</p>
 
-      <div className="mb-3 flex gap-1.5">
-        {(["google_sheets", "excel_agent", "tally_agent"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="rounded-xl px-3 py-1.5 text-xs font-semibold"
-            style={
-              tab === t
-                ? { background: "var(--accent)", color: "#fff" }
-                : { border: "1px solid var(--card-border)" }
-            }
-          >
-            {t === "google_sheets" ? "Sheets" : t === "excel_agent" ? "Excel" : "Tally"}
-          </button>
-        ))}
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {HUB_CATALOG.map((h, i) => {
+          const connected = (connectors.data ?? []).some((c) => c.type === h.type);
+          return (
+            <motion.button
+              key={h.type}
+              type="button"
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-30px" }}
+              transition={{ duration: 0.35, delay: Math.min(i * 0.05, 0.3), ease: [0.23, 1, 0.32, 1] }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => {
+                setFreshKey(null);
+                setOpenType(h.type);
+              }}
+              className="rounded-2xl border p-3 text-left transition"
+              style={{ borderColor: "var(--card-border)", background: "var(--card)" }}
+              aria-label={`${h.title} connect karo`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-2xl" aria-hidden="true">{h.icon}</span>
+                <span className="text-sm font-bold" style={{ color: "var(--ink)" }}>{h.title}</span>
+                {connected && (
+                  <span
+                    className="ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
+                    style={{ color: "var(--accent)", border: "1px solid var(--accent)" }}
+                  >
+                    live
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-xs" style={{ color: "var(--ink-soft)" }}>{h.desc}</p>
+              <span
+                className="mt-2 inline-block rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
+                style={{ background: "linear-gradient(135deg, var(--brand, #e8771a), var(--brand-dark, #b85a00))" }}
+              >
+                {connected ? "Manage" : "Connect"}
+              </span>
+            </motion.button>
+          );
+        })}
       </div>
 
-      {tab === "google_sheets" && (
-        <div className="mb-3 space-y-2">
-          <label htmlFor="sheet-link" className="block text-sm font-semibold">Google Sheets link</label>
-          <input
-            id="sheet-link"
-            className="w-full rounded-xl border bg-transparent px-3 py-2 text-base outline-none"
-            style={{ borderColor: "var(--card-border)" }}
-            placeholder="https://docs.google.com/spreadsheets/d/…"
-            value={sheetLink}
-            onChange={(e) => setSheetLink(e.target.value)}
-            inputMode="url"
-          />
-          <div className="flex items-center gap-2">
-            <Button onClick={connectSheets} disabled={busy}>
-              {busy ? "Connecting…" : "Connect"}
-            </Button>
-            {msg && <span className="text-xs opacity-70">{msg}</span>}
+      {openType && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Connector setup"
+          onClick={() => setOpenType(null)}
+        >
+          <div
+            className="w-full max-w-[440px] rounded-2xl border p-4"
+            style={{ borderColor: "var(--card-border)", background: "var(--card)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-bold" style={{ color: "var(--ink)" }}>
+                {HUB_CATALOG.find((h) => h.type === openType)?.icon}{" "}
+                {HUB_CATALOG.find((h) => h.type === openType)?.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setOpenType(null)}
+                aria-label="Close"
+                className="rounded-lg px-2 py-1 text-lg"
+                style={{ color: "var(--ink-faint)" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {openType === "google_sheets" && (
+              <div className="space-y-2">
+                <label htmlFor="sheet-link" className="block text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                  Google Sheets link
+                </label>
+                <input
+                  id="sheet-link"
+                  className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-base outline-none"
+                  style={{ borderColor: "var(--card-border)", color: "var(--ink)" }}
+                  placeholder="https://docs.google.com/spreadsheets/d/…"
+                  value={sheetLink}
+                  onChange={(e) => setSheetLink(e.target.value)}
+                  inputMode="url"
+                />
+                <Button onClick={connectSheets} disabled={busy}>
+                  {busy ? "Connecting…" : "Connect"}
+                </Button>
+                <p className="text-[11px]" style={{ color: "var(--ink-faint)" }}>
+                  Sheet public honi chahiye. Backend har 60s poll karta hai.
+                </p>
+              </div>
+            )}
+
+            {AGENT_CMD[openType] && (
+              <div className="space-y-2 text-xs" style={{ color: "var(--ink-soft)" }}>
+                <p className="font-semibold" style={{ color: "var(--ink)" }}>
+                  {AGENT_CMD[openType].title} — {AGENT_CMD[openType].note}
+                </p>
+                <ol className="list-decimal space-y-1 pl-5">
+                  <li>Tally kholo (company loaded) — Excel/Busy ke liye file taiyaar rakho</li>
+                  <li>Isi page pe <strong>💻 Computer se jodo</strong> se 6-char code lo</li>
+                  <li>Computer pe agent chalao, code dalo — bas, auto-sync shuru</li>
+                </ol>
+                <pre
+                  className="overflow-auto rounded-lg p-2 font-mono text-[11px]"
+                  style={{ background: "var(--paper)", border: "1px solid var(--card-border)" }}
+                >
+{`cd backend
+python connectors\\${AGENT_CMD[openType].file}`}
+                </pre>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="px-3 py-1.5 text-xs"
+                    onClick={() => copyText(`cd backend\npython connectors\\${AGENT_CMD[openType].file}`, "Command copy ho gaya 📋")}
+                  >
+                    Copy command
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="px-3 py-1.5 text-xs"
+                    onClick={() => createType(openType, {})}
+                    disabled={busy}
+                  >
+                    {busy ? "…" : "Maine agent chala diya ✅"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {(openType === "zapier" || openType === "custom_api" || openType === "shopify" || openType === "woocommerce") && (
+              <div className="space-y-2 text-xs" style={{ color: "var(--ink-soft)" }}>
+                {(openType === "shopify" || openType === "woocommerce") && (
+                  <div>
+                    <label htmlFor="shop-domain" className="mb-1 block text-sm font-semibold" style={{ color: "var(--ink)" }}>
+                      Store domain
+                    </label>
+                    <input
+                      id="shop-domain"
+                      className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-base outline-none"
+                      style={{ borderColor: "var(--card-border)", color: "var(--ink)" }}
+                      placeholder={openType === "shopify" ? "myshop.myshopify.com" : "myshop.com"}
+                      value={shopDomain}
+                      onChange={(e) => setShopDomain(e.target.value)}
+                      inputMode="url"
+                    />
+                  </div>
+                )}
+                <p>
+                  {openType === "zapier"
+                    ? "Zapier/Make me Webhook POST lagao — key neeche se copy karo. Orders/sales seedha ledger me aayenge."
+                    : openType === "custom_api"
+                      ? "Apne software se POST karo — key header me, sales JSON body me."
+                      : "Store ke orders sync honge — key banao aur plugin/worker me dalo."}
+                </p>
+                <Button
+                  disabled={busy}
+                  onClick={() =>
+                    openType === "shopify" || openType === "woocommerce"
+                      ? connectShop(openType)
+                      : createType(openType, {})
+                  }
+                >
+                  {busy ? "…" : "API key banao 🔑"}
+                </Button>
+                {freshKey && (
+                  <div
+                    className="rounded-xl border p-2"
+                    style={{ borderColor: "var(--brand, #e8771a)", background: "var(--brand-soft, #fff3e0)" }}
+                  >
+                    <p className="font-bold" style={{ color: "var(--ink)" }}>Ye key EK BAAR dikhegi — abhi copy karo:</p>
+                    <code className="mt-1 block break-all font-mono text-[11px]" style={{ color: "var(--ink)" }}>
+                      {freshKey.key}
+                    </code>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button className="px-3 py-1.5 text-xs" onClick={() => copyText(freshKey.key, "Key copy ho gayi 📋")}>
+                        Copy key
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="px-3 py-1.5 text-xs"
+                        onClick={() =>
+                          copyText(
+                            `curl -X POST ${API_URL}/v1/sales -H "X-API-Key: ${freshKey.key}" -H "Content-Type: application/json" -d '{"sales":[{"date":"2026-10-15","product":"Atta 5kg","qty":2,"unit_price":240}]}'`,
+                            "cURL copy ho gaya 📋"
+                          )
+                        }
+                      >
+                        Copy cURL
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <p className="text-[11px] opacity-60">
-            Sheet public honi chahiye (private sheets ke liye OAuth deferred). Backend har 60s poll karta hai.
-          </p>
-        </div>
-      )}
-
-      {tab === "excel_agent" && (
-        <div className="mb-3 rounded-xl border border-zinc-800 p-3 text-xs">
-          <p className="mb-1 font-semibold">Excel local agent (watch folder → auto-ingest)</p>
-          <pre className="overflow-auto rounded-lg bg-zinc-900 p-2 text-[11px] text-zinc-300">
-{`cd backend
-set BACKEND_URL=http://localhost:8000
-set TOKEN_FILE=.\connectors\\token.txt
-python connectors\\excel_sync.py`}
-          </pre>
-          <p className="mt-1 opacity-60">Token: pehle /login karo, JWT ko connectors/token.txt me save karo.</p>
-        </div>
-      )}
-
-      {tab === "tally_agent" && (
-        <div className="mb-3 rounded-xl border border-zinc-800 p-3 text-xs">
-          <p className="mb-1 font-semibold">Tally local agent (localhost:9000 → auto-ingest)</p>
-          <pre className="overflow-auto rounded-lg bg-zinc-900 p-2 text-[11px] text-zinc-300">
-{`cd backend
-set TALLY_URL=http://localhost:9000
-set BACKEND_URL=http://localhost:8000
-python connectors\\tally_sync.py`}
-          </pre>
-          <p className="mt-1 opacity-60">Tally ODBC/port 9000 pe chalu karo. Day Book vouchers sync hote hain.</p>
         </div>
       )}
 
@@ -696,26 +893,57 @@ python connectors\\tally_sync.py`}
         ) : connectors.error || !connectors.data ? (
           <ErrorBanner message={connectors.error ?? "Connectors nahi mile"} onRetry={connectors.refetch} />
         ) : connectors.data.length === 0 ? (
-          <p className="text-xs text-zinc-500">Abhi koi connector nahi — upar se Sheets link daalo ya agent chalao.</p>
+          <p className="text-xs text-zinc-500">Abhi kuch connected nahi — upar se apna app chuno, 1 minute me live ✅</p>
         ) : (
           <div className="space-y-2">
-            {connectors.data.map((c) => (
-              <div key={c.id} className="flex items-center gap-2 rounded-xl border border-zinc-800 p-2 text-xs">
-                <span className="font-semibold">{c.type === "google_sheets" ? "Sheets" : c.type === "excel_agent" ? "Excel" : "Tally"}</span>
-                {statusChip(c.status)}
-                <span className="ml-auto opacity-70">
-                  {c.rows_synced} rows{c.last_sync_at ? ` • ${fmtTime(c.last_sync_at)}` : ""}
-                </span>
-                {c.type === "google_sheets" && (
-                  <Button variant="outline" className="px-2 py-1 text-[11px]" onClick={() => syncNow(c.id)}>
-                    Sync now
+            {connectors.data.map((c) => {
+              const label = HUB_CATALOG.find((h) => h.type === c.type)?.title ?? c.type;
+              const regen = async () => {
+                try {
+                  const r = await apiFetch<{ ok: boolean; api_key?: string; error?: string }>(
+                    `/connectors/${c.id}/regenerate-key`,
+                    { method: "POST" }
+                  );
+                  if (r.api_key) {
+                    setFreshKey({ id: c.id, key: r.api_key });
+                    setOpenType(c.type);
+                    toast.success("Nayi key ban gayi 🔑 — purani ab kaam nahi karegi");
+                  } else {
+                    toast.error(r.error ?? "Key nahi bani");
+                  }
+                  connectors.refetch();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : "Key nahi bani");
+                }
+              };
+              return (
+                <div key={c.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-800 p-2 text-xs">
+                  <span className="font-semibold">{label}</span>
+                  {statusChip(c.status)}
+                  {c.key_hint && (
+                    <code className="rounded bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+                      key {c.key_hint}
+                    </code>
+                  )}
+                  <span className="ml-auto opacity-70">
+                    {c.rows_synced} rows{c.last_sync_at ? ` • ${fmtTime(c.last_sync_at)}` : ""}
+                  </span>
+                  {c.type === "google_sheets" && (
+                    <Button variant="outline" className="px-2 py-1 text-[11px]" onClick={() => syncNow(c.id)}>
+                      Sync now
+                    </Button>
+                  )}
+                  {c.has_key && (
+                    <Button variant="outline" className="px-2 py-1 text-[11px]" onClick={regen}>
+                      Nayi key
+                    </Button>
+                  )}
+                  <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={() => remove(c.id)}>
+                    ✕
                   </Button>
-                )}
-                <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={() => remove(c.id)}>
-                  ✕
-                </Button>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1330,16 +1558,102 @@ function DirectEntryCard({ products, onSaved }: { products: ProductRow[]; onSave
   );
 }
 
+/* ---------- computer pairing card (6-char code, token-copy khatm) ---------- */
+
+function PairCodeCard() {
+  const [code, setCode] = useState("");
+  const [secs, setSecs] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (secs <= 0) return;
+    const t = setTimeout(() => setSecs((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [secs]);
+
+  const getCode = async () => {
+    setBusy(true);
+    try {
+      const r = await apiFetch<{ ok: boolean; code?: string; expires_in?: number; error?: string }>(
+        "/connectors/pair-code",
+        { method: "POST" }
+      );
+      if (r.ok && r.code) {
+        setCode(r.code);
+        setSecs(r.expires_in ?? 600);
+      } else {
+        toast.error(r.error ?? "Code nahi bana");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Code nahi bana");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Code copy ho gaya 📋");
+    } catch {
+      toast.error("Copy nahi ho paya");
+    }
+  };
+
+  return (
+    <Card delay={0.08} hover>
+      <p className="text-3xl" aria-hidden="true">💻</p>
+      <h3 className="card-title mt-1">Computer se jodo</h3>
+      <p className="card-sub mb-3">Tally / Excel / Busy — dukaan ke computer se auto-sync.</p>
+      {!code || secs <= 0 ? (
+        <Button onClick={getCode} disabled={busy} className="min-h-[44px]">
+          {busy ? "…" : "Code dikhao"}
+        </Button>
+      ) : (
+        <div>
+          <button
+            type="button"
+            onClick={copy}
+            className="rounded-xl border-2 border-dashed px-4 py-2 text-center font-mono text-2xl font-black tracking-[0.3em]"
+            style={{ borderColor: "var(--brand, #e8771a)", color: "var(--ink)" }}
+            aria-label="Pairing code, tap karke copy karo"
+          >
+            {code}
+          </button>
+          <p className="card-sub mt-2">
+            Computer pe agent chalao, ye code dalo — bas. {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")} min valid.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---------- main page ---------- */
 
-export default function DataPage() {
-  const logs = useApi<IngestLog[]>("/ingest/logs", 300000);
-  const products = useApi<ProductRow[]>("/products", 300000);
-  const files = useApi<FileRow[]>("/ingest/files", 300000);
-  const me = useApi<Me>("/me", 300000);
-  const [upType, setUpType] = useState("sales");
+const REFRESH_MS = 300000;
+// Products/inventory come from the local sqlite ledger (Supabase realtime is
+// not wired to it), so poll them fast — a new Tally item should appear in
+// ~10s, not 5 minutes.
+const LIVE_REFRESH_MS = 10000;
+
+function DataPage() {
+  const logs = useApi<IngestLog[]>("/ingest/logs", REFRESH_MS);
+  const products = useApi<ProductRow[]>("/products", LIVE_REFRESH_MS);
+  const files = useApi<FileRow[]>("/ingest/files", REFRESH_MS);
+  // /me static hai — ek baar lao (stray 401 + auto-logout surface kam).
+  const me = useApi<Me>("/me");
   const [uploading, setUploading] = useState(false);
-  const [tallyUploading, setTallyUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshAll = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([logs.refetch(), products.refetch(), files.refetch()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useRealtime(
     ["ingestion_logs", "processed_files", "document_logs", "products", "inventory"],
@@ -1360,13 +1674,17 @@ export default function DataPage() {
     return apiFetch<IngestSummary>(endpoint, { method: "POST", body: fd });
   };
 
-  const onCsv = async (f: File | undefined) => {
+  // Ek hi dropzone: .xml -> Tally, baaki sab auto-detect (type backend pehchanta hai)
+  const onFile = async (f: File | undefined) => {
     if (!f) return;
+    const isXml = f.name.toLowerCase().endsWith(".xml");
     setUploading(true);
     try {
-      const r = await upload(f, "/ingest/upload", { type: upType });
-      if (r.rows_inserted > 0) toast.success(`${r.rows_inserted} rows synced ✅`);
-      else toast.warning("Koi nayi row nahi — sab skipped");
+      const r = isXml ? await upload(f, "/ingest/tally-xml") : await upload(f, "/ingest/upload");
+      if (r.rows_inserted > 0) {
+        const kind = (r.source_type || "").replace("_", " ");
+        toast.success(`${r.rows_inserted} rows synced ✅${kind ? ` (${kind} samjha)` : ""}`);
+      } else toast.warning("Koi nayi row nahi — sab skipped");
       if (r.warnings?.length) toast.warning(`${r.warnings.length} warnings: ${r.warnings[0].slice(0, 120)}`);
       logs.refetch();
       products.refetch();
@@ -1378,27 +1696,23 @@ export default function DataPage() {
     }
   };
 
-  const onTally = async (f: File | undefined) => {
-    if (!f) return;
-    setTallyUploading(true);
-    try {
-      const r = await upload(f, "/ingest/tally-xml");
-      toast.success(`${r.rows_inserted} rows synced ✅`);
-      logs.refetch();
-      products.refetch();
-      files.refetch();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Tally upload fail ho gaya");
-    } finally {
-      setTallyUploading(false);
-    }
-  };
-
   return (
     <div className="space-y-5">
       <FadeIn>
-        <h1 className="text-xl font-bold text-zinc-50">Data & Sync</h1>
-        <p className="text-xs text-zinc-400">CSV/Excel/Tally lao — sab apne aap sync.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <div>
+            <h1 className="text-xl font-bold text-zinc-50">Hisaab jodo 📥</h1>
+            <p className="text-xs text-zinc-400">Koi ek rasta chuno — baaki hum sambhalenge.</p>
+          </div>
+          <Button
+            variant="outline"
+            className="ml-auto px-3 py-1.5 text-xs"
+            onClick={refreshAll}
+            disabled={refreshing}
+          >
+            {refreshing ? "↻ Refreshing…" : "↻ Refresh now"}
+          </Button>
+        </div>
       </FadeIn>
 
       {showWizard && (
@@ -1414,30 +1728,29 @@ export default function DataPage() {
         </FadeIn>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <Card delay={0.05} hover>
-          <h3 className="card-title">📄 CSV / Excel upload</h3>
-          <p className="card-sub mb-3">sales • inventory • receivables • expenses • products</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={upType} onChange={(e) => setUpType(e.target.value)}>
-              {UPLOAD_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
-            <DropLabel primary accept=".csv,.xlsx,.xls" busy={uploading} busyLabel="Uploading…" onFile={onCsv}>
-              Choose file
-            </DropLabel>
-          </div>
+      {/* 3 aasaan raste — bas ek chuno */}
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card delay={0.02} hover className="ledger-top">
+          <p className="text-3xl" aria-hidden="true">📱</p>
+          <h3 className="card-title mt-1">WhatsApp pe bhejo</h3>
+          <p className="card-sub mb-3">Sabse aasaan — bill photo, voice note ya text. Likhne ki zaroorat nahi.</p>
+          <Link
+            href="/app/chat"
+            className="btn-primary inline-block min-h-[44px] px-4 py-2.5 text-sm font-semibold"
+            style={{ textDecoration: "none" }}
+          >
+            Chat kholo →
+          </Link>
         </Card>
-        <Card delay={0.1} hover>
-          <h3 className="card-title">🧾 Tally XML</h3>
-          <p className="card-sub mb-3">Tally se export kiya XML seedha sync karo</p>
-          <DropLabel accept=".xml" busy={tallyUploading} busyLabel="Uploading…" onFile={onTally}>
-            Choose Tally XML
+        <Card delay={0.05} hover>
+          <p className="text-3xl" aria-hidden="true">📄</p>
+          <h3 className="card-title mt-1">File lao</h3>
+          <p className="card-sub mb-3">Excel, CSV ya Tally XML — type hum pehchan lenge.</p>
+          <DropLabel primary accept=".csv,.xlsx,.xls,.xml" busy={uploading} busyLabel="Padh rahe…" onFile={onFile}>
+            File chuno
           </DropLabel>
         </Card>
+        <PairCodeCard />
       </div>
 
       <DirectEntryCard
@@ -1449,9 +1762,15 @@ export default function DataPage() {
         }}
       />
 
-      <ConnectorsCard meId={me.data?.id} />
+      <details className="group rounded-2xl border border-zinc-800 p-1">
+        <summary className="cursor-pointer list-none rounded-xl px-3 py-3 text-sm font-semibold text-zinc-200 hover:bg-zinc-900/60">
+          <span aria-hidden="true">⚙️</span> Aur tareeke + purana hisab
+          <span className="card-sub ml-2">Sheets • Zapier • dukaan apps • bills • tables</span>
+        </summary>
+        <div className="space-y-5 p-2">
+          <ConnectorsCard meId={me.data?.id} />
 
-      <DocumentsCard />
+          <DocumentsCard />
 
       <FadeIn delay={0.1}>
         <Card>
@@ -1616,5 +1935,9 @@ export default function DataPage() {
         )}
       </FadeIn>
     </div>
+  </details>
+  </div>
   );
 }
+
+export default DataPage;

@@ -67,12 +67,20 @@ def _strip_fences(text: str) -> str:
     return t
 
 
+def _vision_models() -> list:
+    primary = _gemini_model()
+    models = [primary] if primary else []
+    if "gemini-2.5-flash-lite" not in models:
+        models.append("gemini-2.5-flash-lite")
+    return models
+
+
 def _gemini_vision(content: bytes, mime: str) -> dict:
+    import time as _time
+
     api_key = _gemini_key()
     if not api_key:
         raise RuntimeError("missing GEMINI_API_KEY")
-    model = _gemini_model()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     b64 = base64.b64encode(bytes(content)).decode("ascii")
     body = {
         "contents": [
@@ -86,14 +94,32 @@ def _gemini_vision(content: bytes, mime: str) -> dict:
         ],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0},
     }
-    r = requests.post(url, json=body, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    try:
-        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        raise RuntimeError(f"unexpected Gemini response: {str(data)[:400]}")
-    return json.loads(_strip_fences(raw_text))
+    last_err: Exception | None = None
+    for model in _vision_models():
+        for attempt in (1, 2):
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                r = requests.post(url, json=body, timeout=45)
+                if r.status_code in (429, 503):
+                    last_err = RuntimeError(f"Gemini {r.status_code} overloaded")
+                    logger.info("vision %s %s, retrying", model, r.status_code)
+                    _time.sleep(2 * attempt)
+                    continue
+                r.raise_for_status()
+                data = r.json()
+                try:
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                except Exception:
+                    raise RuntimeError(f"unexpected Gemini response: {str(data)[:400]}")
+                return json.loads(_strip_fences(raw_text))
+            except Exception as exc:
+                last_err = exc
+                msg = str(exc)
+                if "503" in msg or "429" in msg or "overloaded" in msg.lower():
+                    _time.sleep(2 * attempt)
+                    continue
+                raise
+    raise RuntimeError(f"vision unavailable after retries: {last_err}")
 
 
 def _load_entries(parsed_raw) -> list:

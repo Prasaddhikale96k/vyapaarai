@@ -66,9 +66,9 @@ def _get_groq_model() -> str:
     try:
         from app import config as _cfg
 
-        return str(getattr(_cfg, "GROQ_MODEL", "") or "").strip() or "llama-3.3-70b-versatile"
+        return str(getattr(_cfg, "GROQ_MODEL", "") or "").strip() or "openai/gpt-oss-120b"
     except Exception:
-        return "llama-3.3-70b-versatile"
+        return "openai/gpt-oss-120b"
 
 
 def _get_gemini_model() -> str:
@@ -81,6 +81,42 @@ def _get_gemini_model() -> str:
         return str(getattr(_cfg, "GEMINI_MODEL", "") or "").strip() or "gemini-2.5-flash"
     except Exception:
         return "gemini-2.5-flash"
+
+
+_OR_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+def _get_openrouter_key() -> str:
+    v = os.getenv("OPENROUTER_API_KEY")
+    if v and v.strip():
+        return v.strip()
+    try:
+        from app import config as _cfg
+
+        return str(getattr(_cfg, "OPENROUTER_API_KEY", "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _get_openrouter_model() -> str:
+    v = os.getenv("OPENROUTER_MODEL")
+    if v and v.strip():
+        return v.strip()
+    try:
+        from app import config as _cfg
+
+        return str(getattr(_cfg, "OPENROUTER_MODEL", "") or "").strip() or "nvidia/nemotron-3-super-120b-a12b:free"
+    except Exception:
+        return "nvidia/nemotron-3-super-120b-a12b:free"
+
+
+def _or_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {_get_openrouter_key()}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost:3000",
+        "X-Title": "VyapaarAI",
+    }
 
 
 def _demo_enabled() -> bool:
@@ -108,31 +144,43 @@ def _chain_order() -> list:
     except Exception:
         primary = primary or "groq"
         fallback = fallback or "gemini"
-    order: list = []
+    picked: list = []
     for p in (str(primary).lower().strip(), str(fallback).lower().strip()):
-        if p in ("groq", "gemini") and p not in order:
-            order.append(p)
-    if not order:
-        order = ["groq", "gemini"]
+        if p in ("groq", "openrouter", "gemini") and p not in picked:
+            picked.append(p)
+    if not picked:
+        picked = ["groq", "openrouter"]
+    # Saare live providers hamesha chain me (key ho to): speed-tier order —
+    # groq/gemini fast hain, openrouter-free (reasoning 120b) slow hai isliye
+    # aakhri live option. User ki primary/fallback pasand bani rehti hai
+    # jab dono me se ek hi ho; teeno hon to speed order lagta hai.
+    for p in ("groq", "gemini", "openrouter"):
+        if p not in picked and (p != "gemini" or _get_gemini_key()) and \
+                (p != "openrouter" or _get_openrouter_key()):
+            picked.append(p)
+    _SPEED = {"groq": 0, "gemini": 1, "openrouter": 2}
+    order = sorted(picked, key=lambda p: (_SPEED.get(p, 9), picked.index(p)))
     return order
 
 
 def _is_429(exc: Exception) -> bool:
+    """Retryable = 429 quota + 503 overload (Gemini vision/text both 503 under load)."""
     try:
         sc = getattr(exc, "status_code", None)
-        if sc == 429:
+        if sc in (429, 503):
             return True
     except Exception:
         pass
     try:
-        if "429" in str(exc):
+        msg = str(exc)
+        if "429" in msg or "503" in msg or "overloaded" in msg.lower():
             return True
     except Exception:
         pass
     # requests HTTPError with response
     try:
         resp = getattr(exc, "response", None)
-        if resp is not None and getattr(resp, "status_code", None) == 429:
+        if resp is not None and getattr(resp, "status_code", None) in (429, 503):
             return True
     except Exception:
         pass
@@ -278,12 +326,32 @@ def _call_groq_tools(
         model=model, temperature=0.2, max_tokens=max_tokens, messages=messages,
     )
     if tools_schema:
+        # NOTE: explicit tool_choice="auto" nahi bhejte — Groq gateway par
+        # gpt-oss models ke saath ye flaky 400 (tool_use_failed) deta hai.
+        # Default server behavior already auto hai; 5/5 stable without it.
         kwargs["tools"] = tools_schema
-        kwargs["tool_choice"] = "auto"
     iterations = 0
     while True:
         kwargs["messages"] = messages
-        resp = client.chat.completions.create(**kwargs)
+        try:
+            resp = client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            # Tools-shape reject (400 / tool_use_failed): ek baar bina tools
+            # plain-text try karo, phir hi haar mano.
+            sc = getattr(exc, "status_code", None)
+            if tools_schema and (sc == 400 or "tool" in str(exc).lower()):
+                logger.warning("groq tools rejected, retrying plain text: %s", str(exc)[:200])
+                plain = dict(model=model, temperature=0.2, max_tokens=max_tokens,
+                             messages=messages)
+                resp2 = client.chat.completions.create(**plain)
+                try:
+                    t = (resp2.choices[0].message.content or "").strip()
+                except Exception:
+                    t = ""
+                if not t:
+                    raise RuntimeError(f"empty Groq response (tools rejected: {exc})")
+                return t, tool_trace
+            raise
         try:
             msg = resp.choices[0].message
         except Exception:
@@ -389,13 +457,154 @@ def _call_gemini_text(system: str, user: str, max_tokens: int) -> str:
     return str(text).strip()
 
 
+def _or_parse_text(data: dict) -> str:
+    """OpenRouter/OpenAI shape se content nikalo (reasoning fields ignore)."""
+    try:
+        msg = (data.get("choices") or [{}])[0].get("message") or {}
+        text = msg.get("content") or ""
+        if isinstance(text, list):  # kuch providers parts-list dete hain
+            text = "".join(
+                p.get("text", "") for p in text if isinstance(p, dict))
+        return str(text or "").strip()
+    except Exception:
+        return ""
+
+
+def _call_openrouter_text(system: str, user: str, max_tokens: int) -> str:
+    if not _get_openrouter_key():
+        raise RuntimeError("missing OPENROUTER_API_KEY")
+    body: dict = {
+        "model": _get_openrouter_model(),
+        "temperature": 0.2,
+        "max_tokens": max(int(max_tokens or 900), 1200),
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    r = requests.post(_OR_URL, json=body, headers=_or_headers(), timeout=90)
+    if r.status_code == 429:
+        exc = RuntimeError(f"OpenRouter 429: {r.text[:300]}")
+        setattr(exc, "status_code", 429)
+        raise exc
+    if r.status_code != 200:
+        raise RuntimeError(f"OpenRouter HTTP {r.status_code}: {r.text[:300]}")
+    text = _or_parse_text(r.json())
+    if not text:
+        raise RuntimeError("empty OpenRouter response")
+    return text
+
+
+def _call_openrouter_tools(
+    system: str, user: str, tools_schema: list, executor, max_iterations: int = 5,
+    max_tokens: int = 1200,
+) -> tuple[str, list]:
+    if not _get_openrouter_key():
+        raise RuntimeError("missing OPENROUTER_API_KEY")
+    model = _get_openrouter_model()
+    messages: list = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    tool_trace: list = []
+    iterations = 0
+    use_tools = bool(tools_schema)
+    while True:
+        body: dict = {
+            "model": model, "temperature": 0.2,
+            "max_tokens": max(int(max_tokens or 1200), 1200),
+            "messages": messages,
+        }
+        if use_tools:
+            # Groq-guard jaisa: explicit tool_choice nahi (default auto hi hai).
+            body["tools"] = tools_schema
+        try:
+            r = requests.post(_OR_URL, json=body, headers=_or_headers(), timeout=120)
+        except Exception as exc:
+            raise RuntimeError(f"OpenRouter network: {exc}")
+        if r.status_code == 429:
+            exc = RuntimeError(f"OpenRouter 429: {r.text[:300]}")
+            setattr(exc, "status_code", 429)
+            raise exc
+        if r.status_code != 200:
+            # Tools reject hue to bina-tools retry (groq jaisa guard)
+            if use_tools and "tool" in r.text.lower():
+                logger.warning("openrouter tools rejected, retrying plain text")
+                use_tools = False
+                continue
+            raise RuntimeError(f"OpenRouter HTTP {r.status_code}: {r.text[:300]}")
+        try:
+            msg = (r.json().get("choices") or [{}])[0].get("message") or {}
+        except Exception:
+            raise RuntimeError("empty OpenRouter response")
+        tool_calls = msg.get("tool_calls") or []
+        if not tool_calls:
+            text = msg.get("content") or ""
+            if isinstance(text, list):
+                text = "".join(p.get("text", "") for p in text if isinstance(p, dict))
+            text = str(text or "").strip()
+            if not text:
+                raise RuntimeError("empty OpenRouter response")
+            return text, tool_trace
+        messages.append({
+            "role": "assistant",
+            "content": msg.get("content") or "",
+            "tool_calls": [
+                {"id": tc.get("id", ""), "type": "function",
+                 "function": {"name": ((tc.get("function") or {}).get("name") or ""),
+                              "arguments": ((tc.get("function") or {}).get("arguments") or "")}}
+                for tc in tool_calls if isinstance(tc, dict)
+            ],
+        })
+        for tc in tool_calls:
+            if not isinstance(tc, dict):
+                continue
+            fn = tc.get("function") or {}
+            name = str(fn.get("name") or "")
+            raw_args = fn.get("arguments") or ""
+            if isinstance(raw_args, dict):
+                args = raw_args
+            else:
+                try:
+                    args = json.loads(raw_args) if raw_args else {}
+                    if not isinstance(args, dict):
+                        args = {}
+                except Exception:
+                    args = {}
+            try:
+                result = executor(name, args)
+            except Exception as exc:
+                result = f"ERROR: {exc}"
+            result_str = str(result)
+            tool_trace.append({"name": name, "args": args, "result_preview": result_str[:500]})
+            messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),
+                             "content": result_str[:1500]})
+        iterations += 1
+        if iterations >= max_iterations:
+            body2 = {"model": model, "temperature": 0.2, "max_tokens": 1200,
+                     "messages": messages}
+            r2 = requests.post(_OR_URL, json=body2, headers=_or_headers(), timeout=120)
+            if r2.status_code != 200:
+                raise RuntimeError(f"OpenRouter HTTP {r2.status_code}: {r2.text[:200]}")
+            text2 = _or_parse_text(r2.json())
+            if not text2:
+                raise RuntimeError("empty OpenRouter response after tools")
+            return text2, tool_trace
+
+
 def _try_with_429_retry(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except Exception as exc:
         if _is_429(exc):
-            time.sleep(2)
-            return fn(*args, **kwargs)
+            time.sleep(3)
+            try:
+                return fn(*args, **kwargs)
+            except Exception as exc2:
+                if _is_429(exc2):
+                    time.sleep(5)
+                    return fn(*args, **kwargs)
+                raise
         raise
 
 
@@ -419,6 +628,12 @@ def complete_text(system: str, user: str, max_tokens: int = 900) -> dict:
                 text = _try_with_429_retry(_call_groq_text, system, user, int(max_tokens))
                 result = {"text": text, "provider": "groq"}
                 logger.info("llm served by groq")
+                _cache_set(cache_key, result)
+                return result
+            elif provider == "openrouter":
+                text = _try_with_429_retry(_call_openrouter_text, system, user, int(max_tokens))
+                result = {"text": text, "provider": "openrouter"}
+                logger.info("llm served by openrouter")
                 _cache_set(cache_key, result)
                 return result
             elif provider == "gemini":
@@ -458,6 +673,11 @@ def chat_with_tools(
     order = _chain_order()
     last_err: Exception | None = None
     for provider in order:
+        # openrouter-free reasoning models interactive tool-loop ke liye bahut
+        # slow hain (60s+) — tools path me skip; text fallback me allowed.
+        # orchestrate() ka prefetch fallback tools-fail ko waise bhi sambhalta hai.
+        if provider == "openrouter":
+            continue
         try:
             if provider == "groq":
                 text, trace = _try_with_429_retry(

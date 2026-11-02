@@ -188,6 +188,14 @@ def parse_date(raw: Any) -> Optional[date]:
     s = str(raw).strip()
     if not s:
         return None
+    # Saaf ISO date (YYYY-MM-DD, Tally/DB se) ko dayfirst se mat palto —
+    # pandas "2026-04-02" ko Feb 4 bana deta hai. Pehle strict ISO try karo.
+    try:
+        m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", s)
+        if m:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except Exception:
+        pass
     try:
         ts = pd.to_datetime(s, dayfirst=True, errors="coerce")
     except Exception:

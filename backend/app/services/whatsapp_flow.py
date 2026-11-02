@@ -368,6 +368,140 @@ def _owner_id_of(profile) -> int:
         return 1
 
 
+def _supplier_links(db, phone: str) -> list:
+    """Phone kisi owner ke supplier/distributor contact se match? -> [(owner, contact)].
+
+    Supplier ka reply owner tak pahunchane ke liye. Never raises."""
+    try:
+        from app.models import Contact, OwnerProfile
+        from app.services.phone import phone_candidates as _cands
+
+        try:
+            variants = _cands(phone)
+        except Exception:
+            variants = [str(phone or "")]
+        try:
+            rows = (
+                db.query(Contact)
+                .filter(Contact.phone.in_(variants),
+                        Contact.kind.in_(["supplier", "distributor"]))
+                .all()
+            )
+        except Exception:
+            return []
+        out = []
+        for c in rows or []:
+            try:
+                o = (
+                    db.query(OwnerProfile)
+                    .filter(OwnerProfile.id == int(getattr(c, "owner_id", 1) or 1))
+                    .first()
+                )
+                if o is not None:
+                    out.append((o, c))
+            except Exception:
+                continue
+        return out
+    except Exception:
+        return []
+
+
+def _handle_supplier_reply(db, incoming: dict, phone: str, links: list) -> None:
+    """Supplier/distributor ka WhatsApp reply -> linked owner(s) ko forward + Action.
+
+    Loop complete: owner ne order bheja -> supplier ne CONFIRM/qty bheja ->
+    owner ko WhatsApp forward + /app/actions me supplier_order pending.
+    Supplier ka OwnerProfile kabhi nahi banta. Never raises."""
+    try:
+        import json as _json
+
+        from app.models import Action
+
+        kind = str(incoming.get("kind", "") or "")
+        if kind == "text":
+            body = str(incoming.get("text", "") or "").strip()
+        else:
+            cap = str(incoming.get("caption", "") or "").strip()
+            if cap:
+                body = cap
+            elif kind == "audio":
+                body = "[voice reply]"
+            elif kind in ("image", "document"):
+                body = "[photo/document reply]"
+            else:
+                body = str(incoming.get("text", "") or "").strip()
+        if not body:
+            body = "[khali reply]"
+        first_biz = ""
+        for owner_prof, contact in links:
+            try:
+                cname = str(getattr(contact, "name", "") or "Supplier").strip() or "Supplier"
+            except Exception:
+                cname = "Supplier"
+            try:
+                biz = str(getattr(owner_prof, "business_name", "") or "").strip()
+            except Exception:
+                biz = ""
+            if not first_biz and biz:
+                first_biz = biz
+            try:
+                owner_phone = str(getattr(owner_prof, "phone", "") or "")
+            except Exception:
+                owner_phone = ""
+            # 1) owner ko WhatsApp forward
+            try:
+                fwd = (f"📦 Supplier reply — {cname} ({phone}):\n{body[:800]}")
+                if owner_phone:
+                    _reply(owner_phone, fwd)
+            except Exception:
+                pass
+            # 2) owner ke Actions me pending supplier_order
+            try:
+                oid = _owner_id_of(owner_prof)
+                title = f"Supplier order: {cname}"[:128]
+                detail = f"supplier:{phone} {body[:120]}"
+                # same text ka duplicate pending na bane
+                try:
+                    dup = (
+                        db.query(Action)
+                        .filter(Action.owner_id == oid, Action.type == "supplier_order",
+                                Action.status == "pending",
+                                Action.target_phone == str(phone or ""),
+                                Action.draft_message == body[:1000])
+                        .first()
+                    )
+                except Exception:
+                    dup = None
+                if dup is None:
+                    try:
+                        cid = int(getattr(contact, "id", 0) or 0)
+                    except Exception:
+                        cid = 0
+                    db.add(Action(
+                        owner_id=oid, type="supplier_order", title=title,
+                        detail=detail, target_name=cname, target_phone=str(phone or ""),
+                        amount=None, draft_message=body[:1000], status="pending",
+                        meta=_json.dumps({"supplier_contact_id": cid,
+                                          "supplier_phone": str(phone or ""),
+                                          "kind": str(getattr(contact, "kind", "") or "")}),
+                    ))
+                    db.commit()
+            except Exception:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                continue
+        # 3) supplier ko confirmation (uski bhasha me short)
+        try:
+            biz_line = f" {first_biz}" if first_biz else ""
+            _reply(phone, f"✅ Order note{biz_line} tak pahunch gaya — dhanyavaad 🙏 (via VyapaarAI)")
+        except Exception:
+            pass
+    except Exception as exc:
+        logger.info("supplier bridge failed: %s", str(exc)[:200])
+
+
 # phone -> monotonic timestamp of last allowlist-gate reply (10-min throttle)
 _allow_reply_at: dict = {}
 
@@ -581,6 +715,23 @@ def handle_incoming(payload: dict) -> None:
                 profile = _owners.get_profile(db, phone)
             except Exception:
                 profile = None
+            # owner's main number: ensure profile exists & active so questions get answered
+            try:
+                if phone in _allowed_phones() and profile is None:
+                    try:
+                        _owners.start_registration(db, phone, incoming.get("pushName"))
+                    except Exception:
+                        pass
+                    profile = _owners.get_profile(db, phone)
+                if phone in _allowed_phones() and profile is not None:
+                    try:
+                        profile.allowed = True
+                        db.commit()
+                    except Exception:
+                        try: db.rollback()
+                        except Exception: pass
+            except Exception:
+                pass
 
             # ---- GATE 1a: ops-suspended profile -> no flows, ops contact only ----
             try:
@@ -593,6 +744,25 @@ def handle_incoming(payload: dict) -> None:
                 except Exception:
                     pass
                 return
+            # ---- SUPPLIER BRIDGE: supplier/distributor ka reply -> owner ko forward ----
+            # Allowed owner ka apna chat hamesha owner-flow me rahe; sirf non-owner
+            # numbers jo kisi owner ke supplier/distributor contact se match karein
+            # yahan handle honge (na OwnerProfile banega, na allowlist-block).
+            try:
+                _is_owner_chat = bool(getattr(profile, "allowed", False)) if profile is not None else False
+            except Exception:
+                _is_owner_chat = False
+            if not _is_owner_chat:
+                try:
+                    _links = _supplier_links(db, phone)
+                except Exception:
+                    _links = []
+                if _links:
+                    try:
+                        _handle_supplier_reply(db, incoming, phone, _links)
+                    except Exception as exc:
+                        logger.info("supplier reply route failed: %s", str(exc)[:200])
+                    return
             # ---- GATE 1: unknown number OR registration in progress ----
             needs_reg = False
             try:

@@ -79,6 +79,25 @@ interface FeedItem {
   time: Date;
 }
 
+interface HubConn {
+  id: number;
+  type: string;
+  status: string;
+  rows_synced: number;
+}
+
+const CONN_LABEL: Record<string, string> = {
+  google_sheets: "Sheets",
+  excel_agent: "Excel",
+  tally_agent: "Tally",
+  busy_agent: "Busy",
+  marg_agent: "Marg",
+  zapier: "Zapier",
+  shopify: "Shopify",
+  woocommerce: "WooCommerce",
+  custom_api: "API",
+};
+
 const FEED_LABEL: Record<string, string> = {
   sales: "Sale synced 🧾",
   actions: "Action update ⚡",
@@ -214,6 +233,7 @@ export default function Dashboard() {
   const matrix = useApi<BuySellMatrix>("/buy-sell-matrix", REFRESH_MS);
   const products = useApi<ProductRow[]>("/products", REFRESH_MS);
   const wa = useApi<WaStatus>("/whatsapp/status", REFRESH_MS);
+  const connectors = useApi<HubConn[]>("/connectors", REFRESH_MS);
 
   const [sku, setSku] = useState<string>("");
   const [reportOpen, setReportOpen] = useState(false);
@@ -237,11 +257,13 @@ export default function Dashboard() {
     matrix.refetch();
     products.refetch();
     wa.refetch();
+    connectors.refetch();
     forecast.refetch();
   };
 
   const pendingActions = useApi<ActionItem[]>(`/actions?status=pending`, REFRESH_MS);
-  const me = useApi<{ name?: string | null }>(`/me`, REFRESH_MS);
+  // /me kabhi badalta nahi — ek baar lao, 5-min poll mat karo (stray 401 + auto-logout surface kam).
+  const me = useApi<{ name?: string | null }>(`/me`);
 
   const hindiDate = (() => {
     try {
@@ -374,6 +396,16 @@ export default function Dashboard() {
             <Badge tone={waConnected ? "emerald" : "amber"}>
               {waConnected ? "WhatsApp connected" : "WhatsApp setup pending"}
             </Badge>
+            {(() => {
+              const live = (connectors.data ?? []).find((c) =>
+                ["live", "polling"].includes(c.status));
+              if (!live) return null;
+              return (
+                <Badge tone="emerald">
+                  🔌 {CONN_LABEL[live.type] ?? live.type} live • {live.rows_synced} rows
+                </Badge>
+              );
+            })()}
             <Button variant="outline" onClick={refetchAll} className="flex items-center gap-1.5">
               <RefreshCw size={14} /> Refresh
             </Button>
@@ -525,13 +557,18 @@ export default function Dashboard() {
           ) : credit.error || !credit.data ? (
             <ErrorBanner message={credit.error ?? "Reasons nahi mile"} onRetry={credit.refetch} />
           ) : (
-            <ul className="mt-2 space-y-1.5">
-              {(credit.data.reasons ?? []).map((r, i) => (
-                <li key={i} className="text-xs leading-relaxed text-zinc-300">
-                  • {r}
-                </li>
-              ))}
-            </ul>
+            <details>
+              <summary className="mt-2 cursor-pointer text-xs font-semibold text-zinc-300 hover:text-zinc-100">
+                Score kyun {(credit.data.overall ?? 0) >= 60 ? "achha" : "kam"} hai? Dekho →
+              </summary>
+              <ul className="mt-2 space-y-1.5">
+                {(credit.data.reasons ?? []).map((r, i) => (
+                  <li key={i} className="text-xs leading-relaxed text-zinc-300">
+                    • {r}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </Card>
       </div>
@@ -726,22 +763,29 @@ export default function Dashboard() {
               ))}
             </div>
           )}
-          <p className="card-sub mt-2">Poora grid neeche dekho ⬇</p>
+          <p className="card-sub mt-2">Kaunsa maal badhao, kaunsa hatao — 4 khaane me.</p>
         </Card>
       </div>
 
-      {/* full grid */}
-      <Section title="Buy / Sell — full grid" delay={0.1}>
-        {matrix.loading && !matrix.data ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SkeletonCard />
-            <SkeletonCard />
+      {/* poora grid — jisko detail chahiye wahi khole */}
+      <Section title="Har product ka hisaab" delay={0.1}>
+        <details className="rounded-2xl border border-zinc-800 p-1">
+          <summary className="cursor-pointer list-none rounded-xl px-3 py-3 text-sm font-semibold text-zinc-200 hover:bg-zinc-900/60">
+            Poori list dekho ({matrix.data?.products?.length ?? 0} products)
+          </summary>
+          <div className="p-2">
+            {matrix.loading && !matrix.data ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            ) : matrix.error || !matrix.data ? (
+              <ErrorBanner message={matrix.error ?? "Matrix nahi mili"} onRetry={matrix.refetch} />
+            ) : (
+              <BuySellGrid data={matrix.data} />
+            )}
           </div>
-        ) : matrix.error || !matrix.data ? (
-          <ErrorBanner message={matrix.error ?? "Matrix nahi mili"} onRetry={matrix.refetch} />
-        ) : (
-          <BuySellGrid data={matrix.data} />
-        )}
+        </details>
       </Section>
     </div>
   );
